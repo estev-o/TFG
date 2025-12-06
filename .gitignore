@@ -1,0 +1,30 @@
+# Entorno virtual Python
+.venv/
+venv/
+env/
+ENV/
+
+# Directorio de salida
+out/
+dataset/
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+
+# Jupyter Notebook
+.ipynb_checkpoints
+
+# IDEs
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
