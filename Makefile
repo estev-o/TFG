@@ -4,7 +4,7 @@
 VENV = .venv
 PYTHON = $(VENV)/bin/python
 SCRIPT_FILTRO = script_filtro.py
-SCRIPT_DETECT = detect_alga_center.py
+SCRIPT_DETECT = recortar_algas.py
 OUTPUT_DIR = out
 N ?= 10
 
@@ -30,18 +30,18 @@ run1: ## Ejecuta filtro (N=número de imágenes, default 10)
 	$(PYTHON) $(SCRIPT_FILTRO) --num_samples $(N)
 	@echo "$(GREEN)Filtro completado$(NC)"
 
-run2: ## Ejecuta detección de algas (N=número de imágenes, default 10)
-	@echo "$(BLUE)Detectando algas en $(N) imágenes...$(NC)"
+run2: ## Recorta y guarda algas (N=número de imágenes, default 10)
+	@echo "$(BLUE)Recortando algas en $(N) imágenes...$(NC)"
 	$(PYTHON) $(SCRIPT_DETECT) --num_samples $(N)
-	@echo "$(GREEN)Detección completada$(NC)"
+	@echo "$(GREEN)Recorte completado$(NC)"
 
-run2_debug: ## Ejecuta detección con debug (N=número de imágenes, default 10)
-	@echo "$(BLUE)Detectando algas en $(N) imágenes (modo debug)...$(NC)"
+run2_debug: ## Recorta algas con debug (N=número de imágenes, default 10)
+	@echo "$(BLUE)Recortando algas en $(N) imágenes (modo debug)...$(NC)"
 	$(PYTHON) $(SCRIPT_DETECT) --num_samples $(N) --debug
-	@echo "$(GREEN)Detección completada$(NC)"
+	@echo "$(GREEN)Recorte completado$(NC)"
 	@echo "$(YELLOW)Ver carpetas *_debug en $(OUTPUT_DIR)/$(NC)"
 
-run2_all: ## Ejecuta detección en TODAS las imágenes
-	@echo "$(BLUE)Detectando algas en TODAS las imágenes...$(NC)"
+run2_all: ## Recorta TODAS las algas
+	@echo "$(BLUE)Recortando TODAS las algas...$(NC)"
 	$(PYTHON) $(SCRIPT_DETECT)
-	@echo "$(GREEN)✓ Detección completa$(NC)"
+	@echo "$(GREEN)✓ Recorte completo$(NC)"

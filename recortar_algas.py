@@ -64,14 +64,7 @@ def calcular_score_alga(contorno, imagen_bgr, gray, centro_x, centro_y):
     perimetro = cv2.arcLength(contorno, True)
     compacidad = (4 * np.pi * area) / (perimetro * perimetro) if perimetro > 0 else 0
     
-    # 3. FORMA: Algas suelen ser más compactas y con área moderada-grande
-    if 1.5 <= aspect_ratio <= 6:
-        score += 50
-        detalles.append(f"AR_ok=+50(AR={aspect_ratio:.2f})")
-    elif aspect_ratio > 10:
-        score -= 100  # Muy alargado = regla
-        detalles.append(f"AR_regla=-100(AR={aspect_ratio:.2f})")
-    
+    # 3. FORMA: Algas suelen ser más compactas
     # Compacidad
     if compacidad > 0.05:  # Algas más compactas
         score += 30
@@ -215,12 +208,12 @@ def detectar_alga_desde_centro(imagen, debug=False, debug_dir=None):
 
 
 def procesar_imagen(imagen_path, output_dir, debug=False):
-    """Detectar alga y guardar imagen con bbox."""
+    """Detectar alga, recortar y guardar con aspect ratio cuadrado (1:1) para IA."""
     
     # Leer imagen
     imagen = cv2.imread(str(imagen_path))
     if imagen is None:
-        return None, "Error al leer imagen"
+        return None, None, None, "Error al leer imagen"
     
     # Crear directorio debug si es necesario
     debug_dir = None
@@ -232,7 +225,7 @@ def procesar_imagen(imagen_path, output_dir, debug=False):
     contorno, bbox = detectar_alga_desde_centro(imagen, debug=debug, debug_dir=debug_dir)
     
     if bbox is None:
-        return None, "No se detectó alga"
+        return None, None, None, "No se detectó alga"
     
     # Calcular info del alga
     x, y, w, h = bbox
@@ -241,22 +234,61 @@ def procesar_imagen(imagen_path, output_dir, debug=False):
     alga_centro_y = y + h // 2
     distancia = np.sqrt((alga_centro_x - centro_x)**2 + (alga_centro_y - centro_y)**2)
     
+    # Añadir padding 10%
+    padding = 0.05
+    pad_x = int(w * padding)
+    pad_y = int(h * padding)
+    
+    x1 = max(0, x - pad_x)
+    y1 = max(0, y - pad_y)
+    x2 = min(imagen.shape[1], x + w + pad_x)
+    y2 = min(imagen.shape[0], y + h + pad_y)
+    
+    # Recortar bbox con padding
+    w_padded = x2 - x1
+    h_padded = y2 - y1
+    
+    # Hacer cuadrado: expandir el lado más corto
+    lado = max(w_padded, h_padded)
+    
+    # Centrar el cuadrado en el centro del alga
+    centro_crop_x = (x1 + x2) // 2
+    centro_crop_y = (y1 + y2) // 2
+    
+    # Calcular nuevos límites cuadrados
+    x1_cuadrado = max(0, centro_crop_x - lado // 2)
+    y1_cuadrado = max(0, centro_crop_y - lado // 2)
+    x2_cuadrado = min(imagen.shape[1], x1_cuadrado + lado)
+    y2_cuadrado = min(imagen.shape[0], y1_cuadrado + lado)
+    
+    # Ajustar si se sale por los bordes
+    if x2_cuadrado - x1_cuadrado < lado:
+        x1_cuadrado = max(0, x2_cuadrado - lado)
+    if y2_cuadrado - y1_cuadrado < lado:
+        y1_cuadrado = max(0, y2_cuadrado - lado)
+    
+    # Recortar
+    alga_recortada = imagen[y1_cuadrado:y2_cuadrado, x1_cuadrado:x2_cuadrado]
+    
+    # Si aún no es perfectamente cuadrado (bordes de imagen), añadir padding negro
+    if alga_recortada.shape[0] != alga_recortada.shape[1]:
+        lado_final = max(alga_recortada.shape[0], alga_recortada.shape[1])
+        alga_cuadrada = np.zeros((lado_final, lado_final, 3), dtype=np.uint8)
+        
+        # Centrar imagen en el cuadrado negro
+        offset_y = (lado_final - alga_recortada.shape[0]) // 2
+        offset_x = (lado_final - alga_recortada.shape[1]) // 2
+        alga_cuadrada[offset_y:offset_y+alga_recortada.shape[0], 
+                      offset_x:offset_x+alga_recortada.shape[1]] = alga_recortada
+        alga_recortada = alga_cuadrada
+    
     # Solo en modo debug: guardar imagen con bounding box
     if debug and debug_dir:
         imagen_result = imagen.copy()
         
-        # Añadir padding 10%
-        padding = 0.1
-        pad_x = int(w * padding)
-        pad_y = int(h * padding)
-        
-        x1 = max(0, x - pad_x)
-        y1 = max(0, y - pad_y)
-        x2 = min(imagen.shape[1], x + w + pad_x)
-        y2 = min(imagen.shape[0], y + h + pad_y)
-        
-        # Dibujar bbox con padding
-        cv2.rectangle(imagen_result, (x1, y1), (x2, y2), (0, 255, 0), 5)
+        # Dibujar bbox cuadrado
+        cv2.rectangle(imagen_result, (x1_cuadrado, y1_cuadrado), 
+                     (x2_cuadrado, y2_cuadrado), (0, 255, 0), 5)
         
         # Dibujar centro de imagen
         cv2.circle(imagen_result, (centro_x, centro_y), 10, (0, 0, 255), -1)
@@ -264,15 +296,20 @@ def procesar_imagen(imagen_path, output_dir, debug=False):
         # Añadir info
         cv2.putText(imagen_result, f"Dist al centro: {distancia:.0f}px", 
                    (10, 40), cv2.FONT_HERSHEY_SIMPLEX, 1.5, (0, 255, 0), 3)
+        cv2.putText(imagen_result, f"Recorte: {alga_recortada.shape[1]}x{alga_recortada.shape[0]}", 
+                   (10, 80), cv2.FONT_HERSHEY_SIMPLEX, 1.5, (0, 255, 0), 3)
         
-        cv2.imwrite(str(debug_dir / '4_alga_detectada.jpg'), imagen_result)
+        cv2.imwrite(str(debug_dir / '4_resultado_final.jpg'), imagen_result)
     
-    # Retornar info del bbox (sin guardar imagen en modo normal)
-    return f"Alga detectada: bbox=({x},{y},{w},{h}), dist_centro={distancia:.0f}px", None
+    # Retornar imagen recortada y su tamaño
+    lado_cuadrado = alga_recortada.shape[0]
+    nombre = imagen_path.stem
+    
+    return alga_recortada, lado_cuadrado, nombre, None
 
 
 def main():
-    parser = argparse.ArgumentParser(description='Detectar alga desde centro con Canny')
+    parser = argparse.ArgumentParser(description='Recortar algas con aspect ratio cuadrado para entrenamiento IA')
     parser.add_argument('--input_dir', type=str, 
                        default='dataset/Kelps_database_photos/Photos_kelps_database',
                        help='Directorio con imágenes')
@@ -309,21 +346,49 @@ def main():
     print(f"Procesando {len(imagenes)} imágenes...")
     print(f"Salida: {output_dir}/\n")
     
-    # Procesar
-    exitosos = 0
-    errores = []
+    # Primera pasada: detectar todas las algas y encontrar tamaño máximo
+    print("→ Fase 1: Detectando algas y calculando tamaño máximo...")
+    algas_detectadas = []
+    tamaño_max = 0
     
     for i, img_path in enumerate(imagenes, 1):
-        print(f"[{i}/{len(imagenes)}] {img_path.name}... ", end='', flush=True)
+        print(f"  [{i}/{len(imagenes)}] {img_path.name}... ", end='', flush=True)
         
-        output_path, error = procesar_imagen(img_path, output_dir, debug=args.debug)
+        alga_recortada, lado_cuadrado, nombre, error = procesar_imagen(img_path, output_dir, debug=args.debug)
         
         if error:
             print(f"{error}")
-            errores.append({'file': img_path.name, 'error': error})
         else:
-            print(f"")
-            exitosos += 1
+            algas_detectadas.append({
+                'alga': alga_recortada,
+                'nombre': nombre,
+                'tamaño': lado_cuadrado
+            })
+            tamaño_max = max(tamaño_max, lado_cuadrado)
+            print(f"OK ({lado_cuadrado}x{lado_cuadrado})")
+    
+    if tamaño_max == 0:
+        print("\n✗ No se detectaron algas válidas en ninguna imagen")
+        sys.exit(1)
+    
+    print(f"\n→ Tamaño máximo detectado: {tamaño_max}x{tamaño_max}")
+    print(f"→ Fase 2: Redimensionando {len(algas_detectadas)} algas...\n")
+    
+    # Segunda pasada: redimensionar todas las algas al tamaño máximo
+    exitosos = 0
+    for datos_alga in algas_detectadas:
+        alga_final = cv2.resize(
+            datos_alga['alga'], 
+            (tamaño_max, tamaño_max), 
+            interpolation=cv2.INTER_LANCZOS4
+        )
+        
+        output_path = output_dir / f"{datos_alga['nombre']}_alga.jpg"
+        cv2.imwrite(str(output_path), alga_final)
+        exitosos += 1
+        print(f"  ✓ {output_path.name}")
+    
+    print(f"\n✓ Recorte completado: {exitosos} algas guardadas ({tamaño_max}x{tamaño_max})")
 
 
 if __name__ == '__main__':
