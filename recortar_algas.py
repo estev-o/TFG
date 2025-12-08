@@ -315,8 +315,8 @@ def main():
                        help='Directorio con imágenes')
     parser.add_argument('--output_dir', type=str, default='out',
                        help='Directorio de salida')
-    parser.add_argument('--num_samples', type=int, default=10,
-                       help='Número de imágenes a procesar')
+    parser.add_argument('--num_samples', type=int, default=None,
+                       help='Número de imágenes a procesar (por defecto: todas)')
     parser.add_argument('--debug', action='store_true',
                        help='Activar modo debug (guarda máscaras intermedias)')
     
@@ -331,8 +331,8 @@ def main():
         print(f"ERROR: No existe el directorio: {input_dir}")
         sys.exit(1)
     
-    # Buscar imágenes
-    patterns = ['*.jfif', '*.jpg', '*.jpeg', '*.png']
+    # Buscar imágenes (case-insensitive para mayúsculas/minúsculas)
+    patterns = ['*.jfif', '*.JFIF', '*.jpg', '*.JPG', '*.jpeg', '*.JPEG', '*.png', '*.PNG', '*.heic', '*.HEIC']
     imagenes = []
     for pattern in patterns:
         imagenes.extend(sorted(input_dir.glob(pattern)))
@@ -341,15 +341,22 @@ def main():
         print(f"ERROR: No se encontraron imágenes")
         sys.exit(1)
     
-    imagenes = imagenes[:args.num_samples]
+    # Limitar solo si num_samples está especificado
+    if args.num_samples:
+        imagenes = imagenes[:args.num_samples]
     
     print(f"Procesando {len(imagenes)} imágenes...")
     print(f"Salida: {output_dir}/\n")
     
-    # Primera pasada: detectar todas las algas y encontrar tamaño máximo
-    print("→ Fase 1: Detectando algas y calculando tamaño máximo...")
-    algas_detectadas = []
+    # Crear directorio temporal
+    temp_dir = output_dir / "temp_crops"
+    temp_dir.mkdir(exist_ok=True)
+    
+    # Primera pasada: detectar, recortar, guardar temporales y trackear tamaños
+    print("→ Fase 1: Detectando algas, recortando y guardando temporales...")
+    metadatos = []  # Solo guardamos (nombre, tamaño) en memoria
     tamaño_max = 0
+    errores = 0
     
     for i, img_path in enumerate(imagenes, 1):
         print(f"  [{i}/{len(imagenes)}] {img_path.name}... ", end='', flush=True)
@@ -358,37 +365,68 @@ def main():
         
         if error:
             print(f"{error}")
+            errores += 1
         else:
-            algas_detectadas.append({
-                'alga': alga_recortada,
+            # Guardar temporal en disco (libera memoria inmediatamente)
+            temp_path = temp_dir / f"{nombre}_temp.jpg"
+            cv2.imwrite(str(temp_path), alga_recortada)
+            
+            # Solo trackear metadatos (mínima memoria)
+            metadatos.append({
                 'nombre': nombre,
-                'tamaño': lado_cuadrado
+                'tamaño': lado_cuadrado,
+                'temp_path': temp_path
             })
             tamaño_max = max(tamaño_max, lado_cuadrado)
             print(f"OK ({lado_cuadrado}x{lado_cuadrado})")
     
     if tamaño_max == 0:
         print("\n✗ No se detectaron algas válidas en ninguna imagen")
+        temp_dir.rmdir()
         sys.exit(1)
     
     print(f"\n→ Tamaño máximo detectado: {tamaño_max}x{tamaño_max}")
-    print(f"→ Fase 2: Redimensionando {len(algas_detectadas)} algas...\n")
+    print(f"→ Fase 2: Redimensionando {len(metadatos)} algas al tamaño máximo...\n")
     
-    # Segunda pasada: redimensionar todas las algas al tamaño máximo
+    # Segunda pasada: leer temporales, redimensionar y guardar finales
     exitosos = 0
-    for datos_alga in algas_detectadas:
+    for i, meta in enumerate(metadatos, 1):
+        # Leer temporal (solo una imagen en memoria a la vez)
+        alga_temp = cv2.imread(str(meta['temp_path']))
+        
+        if alga_temp is None:
+            print(f"  ✗ Error leyendo temporal: {meta['nombre']}")
+            continue
+        
+        # Redimensionar al tamaño máximo
         alga_final = cv2.resize(
-            datos_alga['alga'], 
+            alga_temp, 
             (tamaño_max, tamaño_max), 
             interpolation=cv2.INTER_LANCZOS4
         )
         
-        output_path = output_dir / f"{datos_alga['nombre']}_alga.jpg"
+        # Guardar final
+        output_path = output_dir / f"{meta['nombre']}_alga.jpg"
         cv2.imwrite(str(output_path), alga_final)
         exitosos += 1
-        print(f"  ✓ {output_path.name}")
+        
+        # Liberar memoria de esta imagen
+        del alga_temp
+        del alga_final
+        
+        # Progress cada 50 imágenes
+        if i % 50 == 0:
+            print(f"  [{i}/{len(metadatos)}] Procesadas...")
+    
+    # Limpiar temporales
+    print(f"\n→ Limpiando archivos temporales...")
+    for meta in metadatos:
+        meta['temp_path'].unlink(missing_ok=True)
+    temp_dir.rmdir()
     
     print(f"\n✓ Recorte completado: {exitosos} algas guardadas ({tamaño_max}x{tamaño_max})")
+    if errores > 0:
+        print(f"⚠ {errores} imágenes con errores")
 
 
 if __name__ == '__main__':

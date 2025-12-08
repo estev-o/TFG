@@ -45,3 +45,13 @@ run2_all: ## Recorta TODAS las algas
 	@echo "$(BLUE)Recortando TODAS las algas...$(NC)"
 	$(PYTHON) $(SCRIPT_DETECT)
 	@echo "$(GREEN)✓ Recorte completo$(NC)"
+
+run2_debug_individual: ## Debug de una imagen específica (ej: make run2_debug_individual CODIGO=GI405)
+	@if [ -z "$(CODIGO)" ]; then \
+		echo "$(YELLOW)Error: Debes especificar CODIGO$(NC)"; \
+		echo "$(YELLOW)Uso: make run2_debug_individual CODIGO=GI405$(NC)"; \
+		exit 1; \
+	fi
+	@echo "$(BLUE)Debug individual de imagen $(CODIGO)...$(NC)"
+	$(PYTHON) debug_individual.py $(CODIGO)
+	@echo "$(GREEN)✓ Debug completado$(NC)"
