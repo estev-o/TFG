@@ -37,7 +37,7 @@ run2: ## Recorta y guarda algas (N=número de imágenes, default 10)
 
 run2_debug: ## Recorta algas con debug (N=número de imágenes, default 10)
 	@echo "$(BLUE)Recortando algas en $(N) imágenes (modo debug)...$(NC)"
-	$(PYTHON) $(SCRIPT_DETECT) --num_samples $(N) --debug
+	$(PYTHON) debug_recortar_algas.py --num_samples $(N) --debug
 	@echo "$(GREEN)Recorte completado$(NC)"
 	@echo "$(YELLOW)Ver carpetas *_debug en $(OUTPUT_DIR)/$(NC)"
 
@@ -53,5 +53,5 @@ run2_debug_individual: ## Debug de una imagen específica (ej: make run2_debug_i
 		exit 1; \
 	fi
 	@echo "$(BLUE)Debug individual de imagen $(CODIGO)...$(NC)"
-	$(PYTHON) debug_individual.py $(CODIGO)
+	$(PYTHON) debug_recortar_algas.py $(CODIGO)
 	@echo "$(GREEN)✓ Debug completado$(NC)"

@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
 """
-Detección de alga basada en posición central y bordes.
+Detección y recorte de algas - Versión producción (sin debug)
 - Detecta bordes con Canny
-- Busca desde el centro de la imagen hacia afuera
-- El primer borde cercano al centro es el alga
+- Filtra texto coloreado, reglas, fondo dorado
+- Busca alga desde centro hacia afuera
+- Recorta y redimensiona a cuadrado uniforme
 """
 
 import cv2
@@ -12,317 +13,285 @@ from pathlib import Path
 import argparse
 import sys
 
-def detectar_numeros_rojos(imagen_bgr):
-    """Detecta números rojos usando análisis de color HSV."""
-    # Convertir a HSV
+def detectar_texto_coloreado(imagen_bgr):
+    """Detecta texto verde y rojo usando HSV."""
     hsv = cv2.cvtColor(imagen_bgr, cv2.COLOR_BGR2HSV)
     
-    # Rango para rojo (el rojo está en dos rangos en HSV: 0-10 y 170-180)
-    lower_red1 = np.array([0, 100, 100])
-    upper_red1 = np.array([10, 255, 255])
-    lower_red2 = np.array([170, 100, 100])
-    upper_red2 = np.array([180, 255, 255])
+    # Verde estricto (solo texto brillante/saturado)
+    lower_verde = np.array([82, 150, 40])
+    upper_verde = np.array([92, 255, 130])
     
-    # Crear máscaras para ambos rangos
-    mask_red1 = cv2.inRange(hsv, lower_red1, upper_red1)
-    mask_red2 = cv2.inRange(hsv, lower_red2, upper_red2)
-    mascara_rojo = cv2.bitwise_or(mask_red1, mask_red2)
+    # Rojo estricto (solo texto saturado)
+    lower_rojo1 = np.array([0, 120, 100])
+    upper_rojo1 = np.array([8, 255, 255])
+    lower_rojo2 = np.array([172, 120, 100])
+    upper_rojo2 = np.array([180, 255, 255])
     
-    # Dilatar para unir fragmentos de números
-    kernel = np.ones((5, 5), np.uint8)
-    mascara_rojo = cv2.dilate(mascara_rojo, kernel, iterations=2)
+    # Combinar máscaras
+    mascara_verde = cv2.inRange(hsv, lower_verde, upper_verde)
+    mascara_rojo1 = cv2.inRange(hsv, lower_rojo1, upper_rojo1)
+    mascara_rojo2 = cv2.inRange(hsv, lower_rojo2, upper_rojo2)
     
-    return mascara_rojo
+    mascara_texto = cv2.bitwise_or(mascara_verde, mascara_rojo1)
+    mascara_texto = cv2.bitwise_or(mascara_texto, mascara_rojo2)
+    
+    # Dilatar para capturar texto completo
+    kernel = np.ones((3, 3), np.uint8)
+    mascara_texto = cv2.dilate(mascara_texto, kernel, iterations=2)
+    
+    return mascara_texto
 
 
-def calcular_score_alga(contorno, imagen_bgr, gray, centro_x, centro_y):
-    """Calcula un score para determinar si el contorno es un alga.
-    Score alto = más probable que sea alga.
-    Sistema: Distancia centro + forma + tamaño
-    """
+def tiene_fondo_dorado(contorno, imagen_bgr, umbral_porcentaje=30):
+    """Detecta si el fondo del bbox es dorado/marrón de regla."""
+    x, y, w, h = cv2.boundingRect(contorno)
+    
+    x = max(0, x)
+    y = max(0, y)
+    x2 = min(imagen_bgr.shape[1], x + w)
+    y2 = min(imagen_bgr.shape[0], y + h)
+    
+    roi = imagen_bgr[y:y2, x:x2]
+    if roi.size == 0:
+        return False
+    
+    # Máscara del contorno en coordenadas locales
+    mascara_contorno = np.zeros((y2-y, x2-x), dtype=np.uint8)
+    contorno_local = contorno - np.array([x, y])
+    cv2.drawContours(mascara_contorno, [contorno_local], -1, 255, -1)
+    
+    mascara_fondo = cv2.bitwise_not(mascara_contorno)
+    pixeles_fondo = np.sum(mascara_fondo == 255)
+    
+    if pixeles_fondo < 10:
+        return False
+    
+    # Detectar color dorado en HSV
+    roi_hsv = cv2.cvtColor(roi, cv2.COLOR_BGR2HSV)
+    lower_dorado = np.array([18, 130, 200])
+    upper_dorado = np.array([25, 165, 255])
+    
+    mascara_dorado = cv2.inRange(roi_hsv, lower_dorado, upper_dorado)
+    mascara_dorado_fondo = cv2.bitwise_and(mascara_dorado, mascara_fondo)
+    
+    pixeles_dorados = np.sum(mascara_dorado_fondo == 255)
+    porcentaje_dorado = (pixeles_dorados / pixeles_fondo) * 100
+    
+    return porcentaje_dorado > umbral_porcentaje
+
+
+def calcular_score_alga(contorno, imagen_bgr, gray, centro_x, centro_y, img_width, img_height):
+    """Calcula score para determinar probabilidad de ser alga."""
     x, y, w, h = cv2.boundingRect(contorno)
     area = cv2.contourArea(contorno)
     
     score = 0.0
-    detalles = []  # Para debug
     
-    # 1. Distancia al centro (más cerca = mejor) - PESO PRINCIPAL
+    # 1. Distancia al centro (peso principal)
     distancia_min = float('inf')
     for punto in contorno:
         px, py = punto[0]
         dist = np.sqrt((px - centro_x)**2 + (py - centro_y)**2)
         if dist < distancia_min:
             distancia_min = dist
-    # Normalizar distancia (máximo 150 puntos si está en el centro)
-    score_distancia = max(0, 150 - (distancia_min / 8))
-    score += score_distancia
-    detalles.append(f"dist={score_distancia:.1f}")
     
-    # 2. Calculamos formas
+    score += max(0, 150 - (distancia_min / 8))
+    
+    # 2. Formas
     aspect_ratio = max(w, h) / min(w, h) if min(w, h) > 0 else 0
     extent = area / (w * h) if (w * h) > 0 else 0
     perimetro = cv2.arcLength(contorno, True)
     compacidad = (4 * np.pi * area) / (perimetro * perimetro) if perimetro > 0 else 0
     
-    # 3. FORMA: Algas suelen ser más compactas
-    # Compacidad
-    if compacidad > 0.05:  # Algas más compactas
+    hull = cv2.convexHull(contorno)
+    hull_area = cv2.contourArea(hull)
+    solidez = area / hull_area if hull_area > 0 else 0
+    
+    # 3. Filtros anti-texto
+    margen_texto = 0.10
+    margen_x = int(img_width * margen_texto)
+    margen_y = int(img_height * margen_texto)
+    
+    en_borde = (x < margen_x or y < margen_y or 
+                x + w > img_width - margen_x or y + h > img_height - margen_y)
+    
+    if en_borde and area < 10000:
+        score -= 80
+    
+    if solidez < 0.5 and area < 15000:
+        score -= 60
+    
+    if solidez > 0.7 and area < 3000:
+        score -= 70
+    
+    if area < 2000 and (y < img_height * 0.15 or y + h > img_height * 0.85 or 
+                        x < img_width * 0.15 or x + w > img_width * 0.85):
+        score -= 100
+    
+    perimetro_area_ratio = perimetro / area if area > 0 else 0
+    if perimetro_area_ratio > 0.5 and area < 20000:
+        score -= 50
+    
+    # Filtro anti-regla
+    margen_regla = 0.15
+    margen_regla_x = int(img_width * margen_regla)
+    margen_regla_y = int(img_height * margen_regla)
+    
+    cerca_lateral = (x < margen_regla_x or x + w > img_width - margen_regla_x)
+    cerca_horizontal = (y < margen_regla_y or y + h > img_height - margen_regla_y)
+    
+    if (cerca_lateral or cerca_horizontal) and area < 8000:
+        score -= 90
+    
+    # 4. Premios por forma de alga
+    if compacidad > 0.05:
         score += 30
-        detalles.append(f"compacto=+30(c={compacidad:.3f})")
     
-    # Extent
-    if extent > 0.3:  # Llena bien su bbox
+    if extent > 0.3:
         score += 20
-        detalles.append(f"extent=+20(e={extent:.2f})")
     
-    # 4. TAMAÑO: Áreas grandes son más probables de ser alga
+    if solidez > 0.8:
+        score += 25
+    
+    # 5. Premios por tamaño
     if area > 50000:
         score += 80
-        detalles.append(f"area_muy_grande=+80(a={area:.0f})")
     elif area > 20000:
         score += 60
-        detalles.append(f"area_grande=+60(a={area:.0f})")
     elif area > 5000:
         score += 30
-        detalles.append(f"area_media=+30(a={area:.0f})")
     elif area < 1000:
-        score -= 30 
-        detalles.append(f"area_pequeña=-30(a={area:.0f})")
+        score -= 30
     
-    return score, detalles
+    return score
 
 
-
-
-
-def detectar_alga_desde_centro(imagen, debug=False, debug_dir=None):
+def detectar_alga_desde_centro(imagen):
     """Detecta el alga buscando bordes cercanos al centro."""
-    
     h, w = imagen.shape[:2]
     centro_x, centro_y = w // 2, h // 2
     
-    # Convertir a escala de grises
     gray = cv2.cvtColor(imagen, cv2.COLOR_BGR2GRAY)
-    
-    # Aplicar desenfoque para reducir ruido
     blurred = cv2.GaussianBlur(gray, (5, 5), 0)
-    
-    # Detectar bordes con Canny
     edges = cv2.Canny(blurred, 30, 100)
     
-    # Detectar números rojos y eliminarlos de los bordes
-    mascara_numeros = detectar_numeros_rojos(imagen)
-    edges_sin_numeros = cv2.bitwise_and(edges, cv2.bitwise_not(mascara_numeros))
+    mascara_texto = detectar_texto_coloreado(imagen)
     
-    # Dilatar bordes ligeramente para conectar fragmentos
     kernel = np.ones((3, 3), np.uint8)
-    edges = cv2.dilate(edges_sin_numeros, kernel, iterations=1)
+    edges = cv2.dilate(edges, kernel, iterations=1)
     
-    # DEBUG: Guardar máscaras intermedias (solo 3 imágenes)
-    if debug and debug_dir:
-        blurred_dbg = cv2.GaussianBlur(gray, (5, 5), 0)
-        edges_canny = cv2.Canny(blurred_dbg, 30, 100)
-        
-        cv2.imwrite(str(debug_dir / '1_canny.jpg'), edges_canny)
-        cv2.imwrite(str(debug_dir / '2_mascara_numeros.jpg'), mascara_numeros)
-        cv2.imwrite(str(debug_dir / '3_edges_finales.jpg'), edges)
-    
-    # Encontrar contornos
     contornos, _ = cv2.findContours(edges, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
     
     if not contornos:
         return None, None
     
-    # Calcular score de cada contorno
-    scores = []
-    info_debug = []  # Para archivo de texto debug
+    # Detectar reglas por aspect ratio
+    reglas = []
+    contornos_no_reglas = []
     
-    for idx, contorno in enumerate(contornos):
+    for contorno in contornos:
         area = cv2.contourArea(contorno)
-        razon_filtrado = None
-        
-        # Filtrar contornos muy pequeños (ruido)
         if area < 1000:
-            if debug:
-                info_debug.append(f"Contorno {idx}: área_pequeña ({area:.0f}px)")
             continue
-        
-        # Eliminamos según aspect ratio (reglas)
-        # CON ESTO, ELIMINAMOS LAS REGLAS HORIZONTALES Y VERTICALES
+            
         x, y, w_box, h_box = cv2.boundingRect(contorno)
         aspect_ratio = w_box / h_box if h_box > 0 else 0
         
-        # Reglas horizontales: AR > 3.0
-        if aspect_ratio > 3.0:
-            if debug:
-                info_debug.append(f"Contorno {idx} (área={area:.0f}, AR={aspect_ratio:.1f}): regla_horizontal_AR>3")
-            continue
-        
-        # Reglas verticales: AR < 0.33
-        if aspect_ratio < 0.33:
-            if debug:
-                info_debug.append(f"Contorno {idx} (área={area:.0f}, AR={aspect_ratio:.2f}): regla_vertical_AR<0.33")
-            continue
-        
-        # Calcular score del contorno
-        score, detalles = calcular_score_alga(contorno, imagen, gray, centro_x, centro_y)
-        
-        if debug:
-            detalles_str = ", ".join(detalles)
-            info_debug.append(f"Contorno {idx} (área={area:.0f}, AR={aspect_ratio:.2f}): score={score:.1f} [{detalles_str}]")
-        
-        scores.append((score, contorno, area))
+        if aspect_ratio > 3.0 or aspect_ratio < 0.33:
+            reglas.append(contorno)
+        else:
+            contornos_no_reglas.append(contorno)
     
-    # DEBUG: Guardar info en archivo de texto
-    if debug and debug_dir:
-        with open(debug_dir / 'debug_info.txt', 'w') as f:
-            f.write(f"Total contornos: {len(contornos)}\n")
-            f.write(f"Contornos evaluados: {len(scores)}\n")
-            f.write(f"Contornos filtrados: {len(contornos) - len(scores)}\n\n")
+    # Filtrar contornos
+    contornos_filtrados = []
+    AREA_MINIMA_ALGA = 5000
+    
+    for contorno in contornos_no_reglas:
+        area = cv2.contourArea(contorno)
+        
+        # Filtro área mínima
+        if area < AREA_MINIMA_ALGA:
+            continue
+        
+        # Filtro dentro/cerca de regla
+        dentro_o_cerca_regla = False
+        for regla in reglas:
+            punto_test = (float(contorno[0][0][0]), float(contorno[0][0][1]))
+            distancia = cv2.pointPolygonTest(regla, punto_test, measureDist=True)
             
-            if scores:
-                scores_sorted = sorted(scores, key=lambda x: x[0], reverse=True)
-                f.write("TOP 10 CONTORNOS (por score):\n")
-                f.write("=" * 60 + "\n")
-                for i, (score, _, area) in enumerate(scores_sorted[:10]):
-                    f.write(f"  #{i+1}: Score={score:.1f}, Área={area:.0f}\n")
-                f.write("\n")
-            
-            f.write("DETALLE DE FILTRADO:\n")
-            for line in info_debug:
-                f.write(f"  {line}\n")
+            if distancia >= 0 or distancia > -30:
+                dentro_o_cerca_regla = True
+                break
+        
+        if dentro_o_cerca_regla:
+            continue
+        
+        # Filtro fondo dorado
+        if tiene_fondo_dorado(contorno, imagen):
+            continue
+        
+        # Filtro texto coloreado
+        mask_contorno = np.zeros(imagen.shape[:2], dtype=np.uint8)
+        cv2.drawContours(mask_contorno, [contorno], -1, 255, -1)
+        
+        overlap = cv2.bitwise_and(mask_contorno, mascara_texto)
+        overlap_area = np.count_nonzero(overlap)
+        overlap_ratio = overlap_area / area if area > 0 else 0
+        
+        if overlap_ratio > 0.3:
+            continue
+        
+        contornos_filtrados.append(contorno)
+    
+    # Calcular scores
+    scores = []
+    for contorno in contornos_filtrados:
+        score = calcular_score_alga(contorno, imagen, gray, centro_x, centro_y, w, h)
+        scores.append((score, contorno))
     
     if not scores:
         return None, None
     
-    # Ordenar por score (mayor score = más probable que sea alga)
+    # Ordenar por score
     scores.sort(key=lambda x: x[0], reverse=True)
     
-    # El contorno con mayor score es el alga
-    _, alga_contorno, _ = scores[0]
-    
-    # Obtener bounding box
+    # Mejor contorno
+    _, alga_contorno = scores[0]
     x, y, w_box, h_box = cv2.boundingRect(alga_contorno)
     
     return alga_contorno, (x, y, w_box, h_box)
 
 
-def procesar_imagen(imagen_path, output_dir, debug=False):
-    """Detectar alga, recortar y guardar con aspect ratio cuadrado (1:1) para IA."""
-    
-    # Leer imagen
+def procesar_imagen(imagen_path):
+    """Detectar alga y recortar."""
     imagen = cv2.imread(str(imagen_path))
     if imagen is None:
-        return None, None, None, "Error al leer imagen"
+        return None, None, None, None
     
-    # Crear directorio debug si es necesario
-    debug_dir = None
-    if debug:
-        debug_dir = output_dir / f"{imagen_path.stem}_debug"
-        debug_dir.mkdir(exist_ok=True)
-    
-    # Detectar alga
-    contorno, bbox = detectar_alga_desde_centro(imagen, debug=debug, debug_dir=debug_dir)
+    contorno, bbox = detectar_alga_desde_centro(imagen)
     
     if bbox is None:
-        return None, None, None, "No se detectó alga"
+        return None, None, None, None
     
-    # Calcular info del alga
     x, y, w, h = bbox
-    centro_x, centro_y = imagen.shape[1] // 2, imagen.shape[0] // 2
-    alga_centro_x = x + w // 2
-    alga_centro_y = y + h // 2
-    distancia = np.sqrt((alga_centro_x - centro_x)**2 + (alga_centro_y - centro_y)**2)
-    
-    # Añadir padding 10%
-    padding = 0.05
-    pad_x = int(w * padding)
-    pad_y = int(h * padding)
-    
-    x1 = max(0, x - pad_x)
-    y1 = max(0, y - pad_y)
-    x2 = min(imagen.shape[1], x + w + pad_x)
-    y2 = min(imagen.shape[0], y + h + pad_y)
-    
-    # Recortar bbox con padding
-    w_padded = x2 - x1
-    h_padded = y2 - y1
-    
-    # Hacer cuadrado: expandir el lado más corto
-    lado = max(w_padded, h_padded)
-    
-    # Centrar el cuadrado en el centro del alga
-    centro_crop_x = (x1 + x2) // 2
-    centro_crop_y = (y1 + y2) // 2
-    
-    # Calcular nuevos límites cuadrados
-    x1_cuadrado = max(0, centro_crop_x - lado // 2)
-    y1_cuadrado = max(0, centro_crop_y - lado // 2)
-    x2_cuadrado = min(imagen.shape[1], x1_cuadrado + lado)
-    y2_cuadrado = min(imagen.shape[0], y1_cuadrado + lado)
-    
-    # Ajustar si se sale por los bordes
-    if x2_cuadrado - x1_cuadrado < lado:
-        x1_cuadrado = max(0, x2_cuadrado - lado)
-    if y2_cuadrado - y1_cuadrado < lado:
-        y1_cuadrado = max(0, y2_cuadrado - lado)
-    
-    # Recortar
-    alga_recortada = imagen[y1_cuadrado:y2_cuadrado, x1_cuadrado:x2_cuadrado]
-    
-    # Si aún no es perfectamente cuadrado (bordes de imagen), añadir padding negro
-    if alga_recortada.shape[0] != alga_recortada.shape[1]:
-        lado_final = max(alga_recortada.shape[0], alga_recortada.shape[1])
-        alga_cuadrada = np.zeros((lado_final, lado_final, 3), dtype=np.uint8)
-        
-        # Centrar imagen en el cuadrado negro
-        offset_y = (lado_final - alga_recortada.shape[0]) // 2
-        offset_x = (lado_final - alga_recortada.shape[1]) // 2
-        alga_cuadrada[offset_y:offset_y+alga_recortada.shape[0], 
-                      offset_x:offset_x+alga_recortada.shape[1]] = alga_recortada
-        alga_recortada = alga_cuadrada
-    
-    # Solo en modo debug: guardar imagen con bounding box
-    if debug and debug_dir:
-        imagen_result = imagen.copy()
-        
-        # Dibujar bbox cuadrado
-        cv2.rectangle(imagen_result, (x1_cuadrado, y1_cuadrado), 
-                     (x2_cuadrado, y2_cuadrado), (0, 255, 0), 5)
-        
-        # Dibujar centro de imagen
-        cv2.circle(imagen_result, (centro_x, centro_y), 10, (0, 0, 255), -1)
-        
-        # Añadir info
-        cv2.putText(imagen_result, f"Dist al centro: {distancia:.0f}px", 
-                   (10, 40), cv2.FONT_HERSHEY_SIMPLEX, 1.5, (0, 255, 0), 3)
-        cv2.putText(imagen_result, f"Recorte: {alga_recortada.shape[1]}x{alga_recortada.shape[0]}", 
-                   (10, 80), cv2.FONT_HERSHEY_SIMPLEX, 1.5, (0, 255, 0), 3)
-        
-        cv2.imwrite(str(debug_dir / '4_resultado_final.jpg'), imagen_result)
-    
-    # Retornar imagen recortada y su tamaño
-    lado_cuadrado = alga_recortada.shape[0]
+    alga_recortada = imagen[y:y+h, x:x+w]
     nombre = imagen_path.stem
     
-    return alga_recortada, lado_cuadrado, nombre, None
+    return alga_recortada, w, h, nombre
 
 
 def main():
-    parser = argparse.ArgumentParser(description='Recortar algas con aspect ratio cuadrado para entrenamiento IA')
+    parser = argparse.ArgumentParser(description='Recortar algas para entrenamiento IA')
     parser.add_argument('--input_dir', type=str, 
                        default='dataset/Kelps_database_photos/Photos_kelps_database',
                        help='Directorio con imágenes')
     parser.add_argument('--output_dir', type=str, default='out',
                        help='Directorio de salida')
     parser.add_argument('--num_samples', type=int, default=None,
-                       help='Número de imágenes a procesar (por defecto: todas)')
-    parser.add_argument('--debug', action='store_true',
-                       help='Activar modo debug (guarda máscaras intermedias)')
+                       help='Número de imágenes a procesar')
     
     args = parser.parse_args()
     
-    # Configurar rutas
     input_dir = Path(args.input_dir)
     output_dir = Path(args.output_dir)
     output_dir.mkdir(exist_ok=True)
@@ -331,7 +300,7 @@ def main():
         print(f"ERROR: No existe el directorio: {input_dir}")
         sys.exit(1)
     
-    # Buscar imágenes (case-insensitive para mayúsculas/minúsculas)
+    # Buscar imágenes
     patterns = ['*.jfif', '*.JFIF', '*.jpg', '*.JPG', '*.jpeg', '*.JPEG', '*.png', '*.PNG', '*.heic', '*.HEIC']
     imagenes = []
     for pattern in patterns:
@@ -341,90 +310,95 @@ def main():
         print(f"ERROR: No se encontraron imágenes")
         sys.exit(1)
     
-    # Limitar solo si num_samples está especificado
     if args.num_samples:
         imagenes = imagenes[:args.num_samples]
     
     print(f"Procesando {len(imagenes)} imágenes...")
     print(f"Salida: {output_dir}/\n")
     
-    # Crear directorio temporal
     temp_dir = output_dir / "temp_crops"
     temp_dir.mkdir(exist_ok=True)
     
-    # Primera pasada: detectar, recortar, guardar temporales y trackear tamaños
-    print("→ Fase 1: Detectando algas, recortando y guardando temporales...")
-    metadatos = []  # Solo guardamos (nombre, tamaño) en memoria
+    # Fase 1: Detectar y guardar temporales
+    print("→ Fase 1: Detectando algas y guardando temporales...")
+    metadatos = []
     tamaño_max = 0
     errores = 0
     
     for i, img_path in enumerate(imagenes, 1):
         print(f"  [{i}/{len(imagenes)}] {img_path.name}... ", end='', flush=True)
         
-        alga_recortada, lado_cuadrado, nombre, error = procesar_imagen(img_path, output_dir, debug=args.debug)
+        try:
+            alga_recortada, w, h, nombre = procesar_imagen(img_path)
+        except Exception as e:
+            print(f"Error: {e}")
+            errores += 1
+            continue
         
-        if error:
-            print(f"{error}")
+        if alga_recortada is None:
+            print(f"No se detectó alga")
             errores += 1
         else:
-            # Guardar temporal en disco (libera memoria inmediatamente)
             temp_path = temp_dir / f"{nombre}_temp.jpg"
             cv2.imwrite(str(temp_path), alga_recortada)
             
-            # Solo trackear metadatos (mínima memoria)
             metadatos.append({
                 'nombre': nombre,
-                'tamaño': lado_cuadrado,
+                'ancho': w,
+                'alto': h,
                 'temp_path': temp_path
             })
-            tamaño_max = max(tamaño_max, lado_cuadrado)
-            print(f"OK ({lado_cuadrado}x{lado_cuadrado})")
+            lado_max = max(w, h)
+            tamaño_max = max(tamaño_max, lado_max)
+            print(f"OK ({w}x{h})")
     
     if tamaño_max == 0:
-        print("\n✗ No se detectaron algas válidas en ninguna imagen")
+        print("\n✗ No se detectaron algas válidas")
         temp_dir.rmdir()
         sys.exit(1)
     
-    print(f"\n→ Tamaño máximo detectado: {tamaño_max}x{tamaño_max}")
-    print(f"→ Fase 2: Redimensionando {len(metadatos)} algas al tamaño máximo...\n")
+    print(f"\n→ Tamaño máximo: {tamaño_max}x{tamaño_max}")
+    print(f"→ Fase 2: Redimensionando {len(metadatos)} algas...\n")
     
-    # Segunda pasada: leer temporales, redimensionar y guardar finales
+    # Fase 2: Hacer cuadrado y redimensionar
     exitosos = 0
     for i, meta in enumerate(metadatos, 1):
-        # Leer temporal (solo una imagen en memoria a la vez)
         alga_temp = cv2.imread(str(meta['temp_path']))
         
         if alga_temp is None:
-            print(f"  ✗ Error leyendo temporal: {meta['nombre']}")
             continue
         
-        # Redimensionar al tamaño máximo
-        alga_final = cv2.resize(
-            alga_temp, 
-            (tamaño_max, tamaño_max), 
-            interpolation=cv2.INTER_LANCZOS4
-        )
+        h_temp, w_temp = alga_temp.shape[:2]
+        lado_cuadrado = max(w_temp, h_temp)
         
-        # Guardar final
+        # Canvas cuadrado con fondo gris
+        alga_cuadrada = np.full((lado_cuadrado, lado_cuadrado, 3), 127, dtype=np.uint8)
+        
+        offset_y = (lado_cuadrado - h_temp) // 2
+        offset_x = (lado_cuadrado - w_temp) // 2
+        alga_cuadrada[offset_y:offset_y+h_temp, offset_x:offset_x+w_temp] = alga_temp
+        
+        # Redimensionar
+        alga_final = cv2.resize(alga_cuadrada, (tamaño_max, tamaño_max), 
+                               interpolation=cv2.INTER_LANCZOS4)
+        
         output_path = output_dir / f"{meta['nombre']}_alga.jpg"
         cv2.imwrite(str(output_path), alga_final)
         exitosos += 1
         
-        # Liberar memoria de esta imagen
         del alga_temp
         del alga_final
         
-        # Progress cada 50 imágenes
         if i % 50 == 0:
             print(f"  [{i}/{len(metadatos)}] Procesadas...")
     
     # Limpiar temporales
-    print(f"\n→ Limpiando archivos temporales...")
+    print(f"\n→ Limpiando temporales...")
     for meta in metadatos:
         meta['temp_path'].unlink(missing_ok=True)
     temp_dir.rmdir()
     
-    print(f"\n✓ Recorte completado: {exitosos} algas guardadas ({tamaño_max}x{tamaño_max})")
+    print(f"\n✓ Completado: {exitosos} algas guardadas ({tamaño_max}x{tamaño_max})")
     if errores > 0:
         print(f"⚠ {errores} imágenes con errores")
 
