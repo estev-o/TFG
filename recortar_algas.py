@@ -13,15 +13,63 @@ from pathlib import Path
 import argparse
 import sys
 
+# Configuración reutilizable / constantes
+IMAGE_PATTERNS = [
+    '*.jfif', '*.JFIF', '*.jpg', '*.JPG', '*.jpeg', '*.JPEG',
+    '*.png', '*.PNG', '*.heic', '*.HEIC'
+]
+DILATE_KERNEL = np.ones((3, 3), np.uint8)
+AREA_MINIMA_ALGA = 5000
+OVERLAP_TEXTO_MAX = 0.3
+DISTANCIA_MAX_CERCA_REGLA = 30
+
+
+def es_regla(aspect_ratio):
+    """Determina si un contorno parece una regla por su aspect ratio."""
+    return aspect_ratio > 3.0 or aspect_ratio < 0.33
+
+
+def contorno_dentro_o_cerca_regla(contorno, reglas):
+    """Comprueba si un contorno está dentro o a <=30px de alguna regla."""
+    for regla in reglas:
+        punto_test = (float(contorno[0][0][0]), float(contorno[0][0][1]))
+        distancia = cv2.pointPolygonTest(regla, punto_test, measureDist=True)
+        if distancia >= 0 or distancia > -DISTANCIA_MAX_CERCA_REGLA:
+            return True
+    return False
+
+
+def porcentaje_texto_coloreado(contorno, area, mascara_texto, imagen_shape):
+    """Porcentaje del contorno que coincide con la máscara de texto."""
+    mask_contorno = np.zeros(imagen_shape[:2], dtype=np.uint8)
+    cv2.drawContours(mask_contorno, [contorno], -1, 255, -1)
+
+    overlap = cv2.bitwise_and(mask_contorno, mascara_texto)
+    overlap_area = np.count_nonzero(overlap)
+    return overlap_area / area if area > 0 else 0
+
+
+def recolectar_imagenes(input_dir, num_samples=None):
+    """Devuelve la lista de imágenes encontradas."""
+    imagenes = []
+    for pattern in IMAGE_PATTERNS:
+        imagenes.extend(sorted(input_dir.glob(pattern)))
+
+    if num_samples:
+        imagenes = imagenes[:num_samples]
+
+    return imagenes
+
+
 def detectar_texto_coloreado(imagen_bgr):
     """Detecta texto verde y rojo usando HSV."""
     hsv = cv2.cvtColor(imagen_bgr, cv2.COLOR_BGR2HSV)
     
-    # Verde estricto (solo texto brillante/saturado)
+    # Verde
     lower_verde = np.array([82, 150, 40])
     upper_verde = np.array([92, 255, 130])
     
-    # Rojo estricto (solo texto saturado)
+    # Rojo
     lower_rojo1 = np.array([0, 120, 100])
     upper_rojo1 = np.array([8, 255, 255])
     lower_rojo2 = np.array([172, 120, 100])
@@ -36,8 +84,7 @@ def detectar_texto_coloreado(imagen_bgr):
     mascara_texto = cv2.bitwise_or(mascara_texto, mascara_rojo2)
     
     # Dilatar para capturar texto completo
-    kernel = np.ones((3, 3), np.uint8)
-    mascara_texto = cv2.dilate(mascara_texto, kernel, iterations=2)
+    mascara_texto = cv2.dilate(mascara_texto, DILATE_KERNEL, iterations=2)
     
     return mascara_texto
 
@@ -177,17 +224,16 @@ def detectar_alga_desde_centro(imagen):
     
     mascara_texto = detectar_texto_coloreado(imagen)
     
-    kernel = np.ones((3, 3), np.uint8)
-    edges = cv2.dilate(edges, kernel, iterations=1)
+    edges = cv2.dilate(edges, DILATE_KERNEL, iterations=1)
     
     contornos, _ = cv2.findContours(edges, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
     
     if not contornos:
         return None, None
     
-    # Detectar reglas por aspect ratio
-    reglas = []
-    contornos_no_reglas = []
+    # Detectar regla por aspect ratio
+    regla = []
+    contornos_no_regla = []
     
     for contorno in contornos:
         area = cv2.contourArea(contorno)
@@ -197,16 +243,15 @@ def detectar_alga_desde_centro(imagen):
         x, y, w_box, h_box = cv2.boundingRect(contorno)
         aspect_ratio = w_box / h_box if h_box > 0 else 0
         
-        if aspect_ratio > 3.0 or aspect_ratio < 0.33:
-            reglas.append(contorno)
+        if es_regla(aspect_ratio):
+            regla.append(contorno)
         else:
-            contornos_no_reglas.append(contorno)
+            contornos_no_regla.append(contorno)
     
     # Filtrar contornos
     contornos_filtrados = []
-    AREA_MINIMA_ALGA = 5000
     
-    for contorno in contornos_no_reglas:
+    for contorno in contornos_no_regla:
         area = cv2.contourArea(contorno)
         
         # Filtro área mínima
@@ -214,16 +259,7 @@ def detectar_alga_desde_centro(imagen):
             continue
         
         # Filtro dentro/cerca de regla
-        dentro_o_cerca_regla = False
-        for regla in reglas:
-            punto_test = (float(contorno[0][0][0]), float(contorno[0][0][1]))
-            distancia = cv2.pointPolygonTest(regla, punto_test, measureDist=True)
-            
-            if distancia >= 0 or distancia > -30:
-                dentro_o_cerca_regla = True
-                break
-        
-        if dentro_o_cerca_regla:
+        if contorno_dentro_o_cerca_regla(contorno, regla):
             continue
         
         # Filtro fondo dorado
@@ -231,14 +267,11 @@ def detectar_alga_desde_centro(imagen):
             continue
         
         # Filtro texto coloreado
-        mask_contorno = np.zeros(imagen.shape[:2], dtype=np.uint8)
-        cv2.drawContours(mask_contorno, [contorno], -1, 255, -1)
+        overlap_ratio = porcentaje_texto_coloreado(
+            contorno, area, mascara_texto, imagen.shape
+        )
         
-        overlap = cv2.bitwise_and(mask_contorno, mascara_texto)
-        overlap_area = np.count_nonzero(overlap)
-        overlap_ratio = overlap_area / area if area > 0 else 0
-        
-        if overlap_ratio > 0.3:
+        if overlap_ratio > OVERLAP_TEXTO_MAX:
             continue
         
         contornos_filtrados.append(contorno)
@@ -300,18 +333,11 @@ def main():
         print(f"ERROR: No existe el directorio: {input_dir}")
         sys.exit(1)
     
-    # Buscar imágenes
-    patterns = ['*.jfif', '*.JFIF', '*.jpg', '*.JPG', '*.jpeg', '*.JPEG', '*.png', '*.PNG', '*.heic', '*.HEIC']
-    imagenes = []
-    for pattern in patterns:
-        imagenes.extend(sorted(input_dir.glob(pattern)))
-    
+    imagenes = recolectar_imagenes(input_dir, args.num_samples)
+
     if not imagenes:
         print(f"ERROR: No se encontraron imágenes")
         sys.exit(1)
-    
-    if args.num_samples:
-        imagenes = imagenes[:args.num_samples]
     
     print(f"Procesando {len(imagenes)} imágenes...")
     print(f"Salida: {output_dir}/\n")
@@ -320,7 +346,7 @@ def main():
     temp_dir.mkdir(exist_ok=True)
     
     # Fase 1: Detectar y guardar temporales
-    print("→ Fase 1: Detectando algas y guardando temporales...")
+    print("Fase 1: Detectando algas y guardando temporales...")
     metadatos = []
     tamaño_max = 0
     errores = 0
@@ -353,12 +379,12 @@ def main():
             print(f"OK ({w}x{h})")
     
     if tamaño_max == 0:
-        print("\n✗ No se detectaron algas válidas")
+        print("\nNo se detectaron algas válidas")
         temp_dir.rmdir()
         sys.exit(1)
     
-    print(f"\n→ Tamaño máximo: {tamaño_max}x{tamaño_max}")
-    print(f"→ Fase 2: Redimensionando {len(metadatos)} algas...\n")
+    print(f"\nTamaño máximo: {tamaño_max}x{tamaño_max}")
+    print(f"Fase 2: Redimensionando {len(metadatos)} algas...\n")
     
     # Fase 2: Hacer cuadrado y redimensionar
     exitosos = 0
@@ -371,7 +397,7 @@ def main():
         h_temp, w_temp = alga_temp.shape[:2]
         lado_cuadrado = max(w_temp, h_temp)
         
-        # Canvas cuadrado con fondo gris
+        # Canvas cuadrado con fondo
         alga_cuadrada = np.full((lado_cuadrado, lado_cuadrado, 3), 127, dtype=np.uint8)
         
         offset_y = (lado_cuadrado - h_temp) // 2
