@@ -2,7 +2,7 @@
 """
 Detección y recorte de algas - Versión producción (sin debug)
 - Detecta bordes con Canny
-- Filtra texto coloreado, reglas, fondo dorado
+- Filtra texto coloreado y zonas de regla
 - Busca alga desde centro hacia afuera
 - Recorta y redimensiona a cuadrado uniforme
 """
@@ -21,7 +21,9 @@ IMAGE_PATTERNS = [
 DILATE_KERNEL = np.ones((3, 3), np.uint8)
 AREA_MINIMA_ALGA = 5000
 OVERLAP_TEXTO_MAX = 0.3
-DISTANCIA_MAX_CERCA_REGLA = 30
+AREA_MINIMA_REGLA = 3000
+OVERLAP_REGLA_MAX = 0.5
+REGLA_DILATE_ITERS = 4
 
 
 def es_regla(aspect_ratio):
@@ -29,24 +31,21 @@ def es_regla(aspect_ratio):
     return aspect_ratio > 3.0 or aspect_ratio < 0.33
 
 
-def contorno_dentro_o_cerca_regla(contorno, reglas):
-    """Comprueba si un contorno está dentro o a <=30px de alguna regla."""
-    for regla in reglas:
-        punto_test = (float(contorno[0][0][0]), float(contorno[0][0][1]))
-        distancia = cv2.pointPolygonTest(regla, punto_test, measureDist=True)
-        if distancia >= 0 or distancia > -DISTANCIA_MAX_CERCA_REGLA:
-            return True
-    return False
+def porcentaje_solape_contorno(contorno, area, mascara, imagen_shape):
+    """Porcentaje del contorno que coincide con una máscara dada."""
+    if mascara is None:
+        return 0.0
+    mask_contorno = np.zeros(imagen_shape[:2], dtype=np.uint8)
+    cv2.drawContours(mask_contorno, [contorno], -1, 255, -1)
+
+    overlap = cv2.bitwise_and(mask_contorno, mascara)
+    overlap_area = np.count_nonzero(overlap)
+    return overlap_area / area if area > 0 else 0
 
 
 def porcentaje_texto_coloreado(contorno, area, mascara_texto, imagen_shape):
     """Porcentaje del contorno que coincide con la máscara de texto."""
-    mask_contorno = np.zeros(imagen_shape[:2], dtype=np.uint8)
-    cv2.drawContours(mask_contorno, [contorno], -1, 255, -1)
-
-    overlap = cv2.bitwise_and(mask_contorno, mascara_texto)
-    overlap_area = np.count_nonzero(overlap)
-    return overlap_area / area if area > 0 else 0
+    return porcentaje_solape_contorno(contorno, area, mascara_texto, imagen_shape)
 
 
 def recolectar_imagenes(input_dir, num_samples=None):
@@ -59,6 +58,28 @@ def recolectar_imagenes(input_dir, num_samples=None):
         imagenes = imagenes[:num_samples]
 
     return imagenes
+
+
+def construir_mascara_regla(contornos_regla, imagen_shape):
+    """Construye una máscara binaria de las reglas detectadas por forma."""
+    if not contornos_regla:
+        return None
+
+    mask = np.zeros(imagen_shape[:2], dtype=np.uint8)
+
+    for contorno in contornos_regla:
+        area = cv2.contourArea(contorno)
+        if area < AREA_MINIMA_REGLA:
+            continue
+
+        rect = cv2.minAreaRect(contorno)
+        box = cv2.boxPoints(rect).astype(np.int32)
+        cv2.drawContours(mask, [box], -1, 255, -1)
+
+    if np.any(mask):
+        mask = cv2.dilate(mask, DILATE_KERNEL, iterations=REGLA_DILATE_ITERS)
+
+    return mask
 
 
 def detectar_texto_coloreado(imagen_bgr):
@@ -87,44 +108,6 @@ def detectar_texto_coloreado(imagen_bgr):
     mascara_texto = cv2.dilate(mascara_texto, DILATE_KERNEL, iterations=2)
     
     return mascara_texto
-
-
-def tiene_fondo_dorado(contorno, imagen_bgr, umbral_porcentaje=30):
-    """Detecta si el fondo del bbox es dorado/marrón de regla."""
-    x, y, w, h = cv2.boundingRect(contorno)
-    
-    x = max(0, x)
-    y = max(0, y)
-    x2 = min(imagen_bgr.shape[1], x + w)
-    y2 = min(imagen_bgr.shape[0], y + h)
-    
-    roi = imagen_bgr[y:y2, x:x2]
-    if roi.size == 0:
-        return False
-    
-    # Máscara del contorno en coordenadas locales
-    mascara_contorno = np.zeros((y2-y, x2-x), dtype=np.uint8)
-    contorno_local = contorno - np.array([x, y])
-    cv2.drawContours(mascara_contorno, [contorno_local], -1, 255, -1)
-    
-    mascara_fondo = cv2.bitwise_not(mascara_contorno)
-    pixeles_fondo = np.sum(mascara_fondo == 255)
-    
-    if pixeles_fondo < 10:
-        return False
-    
-    # Detectar color dorado en HSV
-    roi_hsv = cv2.cvtColor(roi, cv2.COLOR_BGR2HSV)
-    lower_dorado = np.array([18, 130, 200])
-    upper_dorado = np.array([25, 165, 255])
-    
-    mascara_dorado = cv2.inRange(roi_hsv, lower_dorado, upper_dorado)
-    mascara_dorado_fondo = cv2.bitwise_and(mascara_dorado, mascara_fondo)
-    
-    pixeles_dorados = np.sum(mascara_dorado_fondo == 255)
-    porcentaje_dorado = (pixeles_dorados / pixeles_fondo) * 100
-    
-    return porcentaje_dorado > umbral_porcentaje
 
 
 def calcular_score_alga(contorno, imagen_bgr, gray, centro_x, centro_y, img_width, img_height):
@@ -232,7 +215,7 @@ def detectar_alga_desde_centro(imagen):
         return None, None
     
     # Detectar regla por aspect ratio
-    regla = []
+    reglas = []
     contornos_no_regla = []
     
     for contorno in contornos:
@@ -244,9 +227,11 @@ def detectar_alga_desde_centro(imagen):
         aspect_ratio = w_box / h_box if h_box > 0 else 0
         
         if es_regla(aspect_ratio):
-            regla.append(contorno)
+            reglas.append(contorno)
         else:
             contornos_no_regla.append(contorno)
+
+    mascara_regla = construir_mascara_regla(reglas, imagen.shape)
     
     # Filtrar contornos
     contornos_filtrados = []
@@ -257,13 +242,12 @@ def detectar_alga_desde_centro(imagen):
         # Filtro área mínima
         if area < AREA_MINIMA_ALGA:
             continue
-        
-        # Filtro dentro/cerca de regla
-        if contorno_dentro_o_cerca_regla(contorno, regla):
-            continue
-        
-        # Filtro fondo dorado
-        if tiene_fondo_dorado(contorno, imagen):
+
+        # Filtro: dentro de la regla detectada por forma
+        overlap_regla = porcentaje_solape_contorno(
+            contorno, area, mascara_regla, imagen.shape
+        )
+        if overlap_regla > OVERLAP_REGLA_MAX:
             continue
         
         # Filtro texto coloreado
