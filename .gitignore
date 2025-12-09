@@ -7,12 +7,15 @@ ENV/
 # Directorio de salida
 out/
 dataset/
+yolo/
+runs_yolo/
 
 # Python
 __pycache__/
 *.py[cod]
 *$py.class
 *.so
+yolov8n.pt
 .Python
 
 # Jupyter Notebook

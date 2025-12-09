@@ -9,12 +9,33 @@ Comportamiento:
 """
 from pathlib import Path
 import sys
+import argparse
 import pandas as pd
 
 BASE = Path(__file__).parent
 INPUT = BASE / 'dataset' / 'Kelps_database_photos' / 'Photos_kelp_database.xlsx'
 OUT_CSV = BASE / 'dataset' / 'kelp_photos_filtered.csv'
 OUT_XLSX = BASE / 'dataset' / 'kelp_photos_filtered.xlsx'
+PHOTOS_DIR = BASE / 'dataset' / 'Kelps_database_photos' / 'Photos_kelps_database'
+PHOTO_EXTS = {'.jfif', '.jpg', '.jpeg', '.png', '.heic'}
+
+
+def parse_args():
+	parser = argparse.ArgumentParser(
+		description='Filtra el Excel y opcionalmente limpia fotos inexistentes en el CSV.'
+	)
+	parser.add_argument(
+		'--dry-run',
+		action='store_true',
+		help='Solo muestra cuántas fotos se eliminarían, sin borrar nada.'
+	)
+	parser.add_argument(
+		'--num_samples',
+		type=int,
+		default=None,
+		help='Compatibilidad con Makefile; no se usa en este script.'
+	)
+	return parser.parse_args()
 
 
 def find_column(df_columns, target):
@@ -43,7 +64,68 @@ def find_column(df_columns, target):
 	return None
 
 
+def limpiar_fotos(out, dry_run=False):
+	codigos_validos = set()
+	for code in out['Photo_cod']:
+		if pd.isna(code):
+			continue
+		code_str = str(code).strip()
+		if code_str:
+			codigos_validos.add(code_str)
+
+	if not PHOTOS_DIR.exists():
+		print(f'AVISO: no se encontró el directorio de fotos: {PHOTOS_DIR}')
+		return
+
+	codigos_norm = {c.lower() for c in codigos_validos}
+	codigos_stem = {Path(c).stem.lower() for c in codigos_validos}
+
+	revisadas = 0
+	ignorar = 0
+	eliminadas = 0
+	eliminables = 0
+
+	for foto in PHOTOS_DIR.iterdir():
+		if not foto.is_file():
+			continue
+
+		if foto.suffix.lower() not in PHOTO_EXTS:
+			ignorar += 1
+			continue
+
+		revisadas += 1
+		nombre = foto.name.lower()
+		stem = foto.stem.lower()
+
+		if nombre in codigos_norm or stem in codigos_stem:
+			continue
+
+		if dry_run:
+			eliminables += 1
+			continue
+
+		try:
+			foto.unlink()
+			eliminadas += 1
+		except Exception as e:
+			print(f'No se pudo eliminar {foto.name}: {e}')
+
+	quedarian = revisadas - (eliminables if dry_run else eliminadas)
+	if dry_run:
+		print(
+			f'Revisión de {PHOTOS_DIR}: {revisadas} archivos de imagen, '
+			f'{eliminables} se eliminarían, {quedarian} quedarían, '
+			f'{ignorar} ignorados por extensión (dry-run, no se borró nada)'
+		)
+	else:
+		print(
+			f'Revisión de {PHOTOS_DIR}: {revisadas} archivos de imagen, '
+			f'{eliminadas} eliminados, {quedarian} quedan, {ignorar} ignorados por extensión'
+		)
+
+
 def main():
+	args = parse_args()
 	if not INPUT.exists():
 		print(f'ERROR: archivo de entrada no encontrado: {INPUT}')
 		sys.exit(2)
@@ -89,7 +171,8 @@ def main():
 	print(f'Filas eliminadas por valores no numéricos: {dropped_non_numeric}')
 	print(f'Filas eliminadas donde HPI e IVR eran ambos 0: {dropped_both_zero}')
 
+	limpiar_fotos(out, dry_run=args.dry_run)
+
 
 if __name__ == '__main__':
 	main()
-

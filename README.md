@@ -70,9 +70,13 @@ Notas adicionales
 
 # Normalización de Imágenes
 
+Coinciden solo 3 769: sobran 1 215 fotos que no aparecen en el CSV, y faltan 354 códigos del CSV que no tienen foto en el directorio.
+
 1. Recortar el alga
 	1.1 Técnicas de CV
 		1.1.1 Detectar qué es el alga (lo más centrado, colores de alga, tamaño irregular (no cuadrado o texto)...)
 		1.1.2 Calcular su bounding box y recortar
 		1.1.3 Recrear la imagen con tamaño que querramos y padding para mantener la relacción de aspecto
+
+		1.1.4 Usamos YOLO entrenándolo con ejemplos bien recortados de el primer proceso, así podremos generalizar más facilmente que haciendo el coso directamente
 	1.2 Técnicas de IA

@@ -1,12 +1,30 @@
-.PHONY: help clean run1 run2 run2_debug run2_all
+.PHONY: help clean run1 run1_debug run2 run2_debug run2_all run2_debug_individual run3 train_yolo apply_yolo
 
 # Variables
 VENV = .venv
 PYTHON = $(VENV)/bin/python
 SCRIPT_FILTRO = script_filtro.py
 SCRIPT_DETECT = recortar_algas.py
+SCRIPT_YOLO = recortar_yolo.py
+SCRIPT_TRAIN = entrenar_yolo.py
+SCRIPT_APPLY = aplicar_yolo.py
 OUTPUT_DIR = out
 N ?= 10
+VAL ?= 0.2
+REVIEW ?=
+REVIEW_MAX ?= 900
+YOLO_DATA ?= yolo/data.yaml
+YOLO_MODEL ?= yolov8n.pt
+YOLO_EPOCHS ?= 60
+YOLO_BATCH ?= 8
+YOLO_IMG ?= 640
+YOLO_DEVICE ?= cpu
+APPLY_MODEL ?= runs_yolo/kelp/weights/best.pt
+APPLY_DATASET ?= dataset/Kelps_database_photos/Photos_kelps_database
+APPLY_NUM ?= 10
+APPLY_IMG ?= 640
+APPLY_OUT ?= $(OUTPUT_DIR)
+APPLY_DEVICE ?= cpu
 
 # Colores para output
 BLUE = \033[0;34m
@@ -23,12 +41,18 @@ help: ## Muestra esta ayuda
 clean: ## Limpia archivos de salida
 	@echo "$(YELLOW)Limpiando $(OUTPUT_DIR)/...$(NC)"
 	rm -rf $(OUTPUT_DIR)/*
+	rm -rf yolo/*
 	@echo "$(GREEN)Limpio$(NC)"
 
 run1: ## Ejecuta filtro (N=número de imágenes, default 10)
 	@echo "$(BLUE)Ejecutando filtro en $(N) imágenes...$(NC)"
 	$(PYTHON) $(SCRIPT_FILTRO) --num_samples $(N)
 	@echo "$(GREEN)Filtro completado$(NC)"
+
+run1_debug: ## Dry-run del filtro (no borra fotos, solo muestra cuántas se eliminarían)
+	@echo "$(BLUE)Dry-run del filtro (sin borrar nada)...$(NC)"
+	$(PYTHON) $(SCRIPT_FILTRO) --dry-run
+	@echo "$(GREEN)Dry-run completado$(NC)"
 
 run2: ## Recorta y guarda algas (N=número de imágenes, default 10)
 	@echo "$(BLUE)Recortando algas en $(N) imágenes...$(NC)"
@@ -55,3 +79,21 @@ run2_debug_individual: ## Debug de una imagen específica (ej: make run2_debug_i
 	@echo "$(BLUE)Debug individual de imagen $(CODIGO)...$(NC)"
 	$(PYTHON) debug_recortar_algas.py $(CODIGO)
 	@echo "$(GREEN)✓ Debug completado$(NC)"
+
+# run3 args: N=num_samples, VAL=val_split, REVIEW=--review para modo interactivo, REVIEW_MAX=900
+run3: ## Genera dataset YOLO (yolo/images+labels y data.yaml)
+	@echo "$(BLUE)Generando dataset para YOLO con $(N) imágenes (val_split=$(VAL))...$(NC)"
+	$(PYTHON) $(SCRIPT_YOLO) --num_samples $(N) --val_split $(VAL) --overwrite $(if $(REVIEW),$(REVIEW) --review_max_size $(REVIEW_MAX),)
+	@echo "$(GREEN)Dataset YOLO listo en yolo/$(NC)"
+
+# train_yolo args: YOLO_MODEL=yolov8n.pt YOLO_DATA=yolo/data.yaml YOLO_EPOCHS YOLO_BATCH YOLO_IMG YOLO_DEVICE
+train_yolo: ## Entrena YOLOv8 con el data.yaml generado
+	@echo "$(BLUE)Entrenando YOLO: modelo=$(YOLO_MODEL), epochs=$(YOLO_EPOCHS), batch=$(YOLO_BATCH), imgsz=$(YOLO_IMG), device=$(YOLO_DEVICE)$(NC)"
+	$(PYTHON) $(SCRIPT_TRAIN) --model $(YOLO_MODEL) --data $(YOLO_DATA) --epochs $(YOLO_EPOCHS) --batch $(YOLO_BATCH) --imgsz $(YOLO_IMG) --device $(YOLO_DEVICE)
+	@echo "$(GREEN)Entrenamiento lanzado (resultados en runs_yolo/)$(NC)"
+
+# apply_yolo args: APPLY_MODEL=best.pt APPLY_DATASET=dir APPLY_NUM APPLY_IMG APPLY_OUT APPLY_DEVICE
+apply_yolo: ## Aplica YOLO a imágenes aleatorias y recorta a $(OUTPUT_DIR)/
+	@echo "$(BLUE)Aplicando YOLO sobre $(APPLY_NUM) imágenes aleatorias...$(NC)"
+	$(PYTHON) $(SCRIPT_APPLY) --model $(APPLY_MODEL) --dataset $(APPLY_DATASET) --num_images $(APPLY_NUM) --imgsz $(APPLY_IMG) --output_dir $(APPLY_OUT) --device $(APPLY_DEVICE)
+	@echo "$(GREEN)Recortes guardados en $(APPLY_OUT)/$(NC)"
