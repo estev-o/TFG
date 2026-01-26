@@ -9,10 +9,12 @@ from pathlib import Path
 import torch
 from ultralytics import YOLO
 
+REPO_ROOT = Path(__file__).resolve().parent.parent
+
 
 def parse_args():
     parser = argparse.ArgumentParser(description="Entrenar YOLOv8 con el dataset yolo/data.yaml")
-    parser.add_argument("--data", default="yolo/data.yaml", help="Ruta al data.yaml")
+    parser.add_argument("--data", default=str(REPO_ROOT / "yolo" / "data.yaml"), help="Ruta al data.yaml")
     parser.add_argument("--model", default="yolov8n.pt", help="Checkpoint inicial (p.ej. yolov8n.pt)")
     parser.add_argument("--epochs", type=int, default=100, help="Número de épocas")
     parser.add_argument("--imgsz", type=int, default=640, help="Tamaño de imagen")
@@ -22,7 +24,7 @@ def parse_args():
         default=None,
         help="Dispositivo (ej. 0, 0,1 o cpu). Por defecto autodetecta GPU y si no hay usa cpu.",
     )
-    parser.add_argument("--project", default="runs_yolo", help="Carpeta base de resultados")
+    parser.add_argument("--project", default=str(REPO_ROOT / "runs_yolo"), help="Carpeta base de resultados")
     parser.add_argument("--name", default="kelp", help="Nombre del experimento")
     return parser.parse_args()
 

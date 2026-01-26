@@ -1,13 +1,14 @@
-.PHONY: help clean run1 run1_debug run2 run2_debug run2_all run2_debug_individual run3 train_yolo apply_yolo
+.PHONY: help clean run1 run1_debug run2 run2_debug run2_all run2_debug_individual run3 train_yolo apply_yolo normalize_out
 
 # Variables
 VENV = .venv
 PYTHON = $(VENV)/bin/python
-SCRIPT_FILTRO = script_filtro.py
-SCRIPT_DETECT = recortar_algas.py
-SCRIPT_YOLO = recortar_yolo.py
-SCRIPT_TRAIN = entrenar_yolo.py
-SCRIPT_APPLY = aplicar_yolo.py
+SCRIPT_FILTRO = scripts/01_script_filtro.py
+SCRIPT_DETECT = scripts/02_recortar_algas.py
+SCRIPT_YOLO = scripts/04_recortar_yolo.py
+SCRIPT_TRAIN = scripts/05_entrenar_yolo.py
+SCRIPT_APPLY = scripts/06_aplicar_yolo.py
+SCRIPT_NORM = scripts/07_normalizar_recortes.py
 OUTPUT_DIR = out
 N ?= 10
 VAL ?= 0.2
@@ -25,6 +26,10 @@ APPLY_NUM ?= 10
 APPLY_IMG ?= 640
 APPLY_OUT ?= $(OUTPUT_DIR)
 APPLY_DEVICE ?= cpu
+NORM_INPUT ?= out/out
+NORM_CSV ?= dataset/kelp_photos_filtered.csv
+NORM_OUTPUT ?= out_img_norm
+NORM_BG ?= 127
 
 # Colores para output
 BLUE = \033[0;34m
@@ -61,7 +66,7 @@ run2: ## Recorta y guarda algas (N=número de imágenes, default 10)
 
 run2_debug: ## Recorta algas con debug (N=número de imágenes, default 10)
 	@echo "$(BLUE)Recortando algas en $(N) imágenes (modo debug)...$(NC)"
-	$(PYTHON) debug_recortar_algas.py --num_samples $(N) --debug
+	$(PYTHON) scripts/03_debug_recortar_algas.py --num_samples $(N) --debug
 	@echo "$(GREEN)Recorte completado$(NC)"
 	@echo "$(YELLOW)Ver carpetas *_debug en $(OUTPUT_DIR)/$(NC)"
 
@@ -77,13 +82,13 @@ run2_debug_individual: ## Debug de una imagen específica (ej: make run2_debug_i
 		exit 1; \
 	fi
 	@echo "$(BLUE)Debug individual de imagen $(CODIGO)...$(NC)"
-	$(PYTHON) debug_recortar_algas.py $(CODIGO)
+	$(PYTHON) scripts/03_debug_recortar_algas.py $(CODIGO)
 	@echo "$(GREEN)✓ Debug completado$(NC)"
 
 # run3 args: N=num_samples, VAL=val_split, REVIEW=--review para modo interactivo, REVIEW_MAX=900
 run3: ## Genera dataset YOLO (yolo/images+labels y data.yaml)
 	@echo "$(BLUE)Generando dataset para YOLO con $(N) imágenes (val_split=$(VAL))...$(NC)"
-	$(PYTHON) $(SCRIPT_YOLO) --val_split $(VAL) --overwrite --review
+	$(PYTHON) $(SCRIPT_YOLO) --num_samples $(N) --val_split $(VAL) --overwrite $(if $(REVIEW),$(REVIEW) --review_max_size $(REVIEW_MAX),)
 	@echo "$(GREEN)Dataset YOLO listo en yolo/$(NC)"
 
 # train_yolo args: YOLO_MODEL=yolov8n.pt YOLO_DATA=yolo/data.yaml YOLO_EPOCHS YOLO_BATCH YOLO_IMG YOLO_DEVICE
@@ -97,3 +102,9 @@ apply_yolo: ## Aplica YOLO a imágenes aleatorias y recorta a $(OUTPUT_DIR)/
 	@echo "$(BLUE)Aplicando YOLO sobre $(APPLY_NUM) imágenes aleatorias...$(NC)"
 	$(PYTHON) $(SCRIPT_APPLY) --model $(APPLY_MODEL) --dataset $(APPLY_DATASET) --num_images $(APPLY_NUM) --imgsz $(APPLY_IMG) --output_dir $(APPLY_OUT) --device $(APPLY_DEVICE)
 	@echo "$(GREEN)Recortes guardados en $(APPLY_OUT)/$(NC)"
+
+# normalize_out args: NORM_INPUT NORM_CSV NORM_OUTPUT NORM_BG
+normalize_out: ## Normaliza recortes y filtra por CSV
+	@echo "$(BLUE)Normalizando recortes en $(NORM_INPUT) usando $(NORM_CSV)...$(NC)"
+	$(PYTHON) $(SCRIPT_NORM) --input_dir $(NORM_INPUT) --csv $(NORM_CSV) --output_dir $(NORM_OUTPUT) --bg $(NORM_BG)
+	@echo "$(GREEN)Normalización completa en $(NORM_OUTPUT)/$(NC)"

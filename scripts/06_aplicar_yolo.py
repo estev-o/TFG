@@ -8,6 +8,7 @@ Aplica un modelo YOLO entrenado para recortar algas de imágenes aleatorias del 
 
 import argparse
 import random
+from importlib.util import module_from_spec, spec_from_file_location
 from pathlib import Path
 from typing import Optional
 
@@ -15,13 +16,26 @@ import cv2
 import torch
 from ultralytics import YOLO
 
-import recortar_algas as detector
-
-BASE_DIR = Path(__file__).parent
-DEFAULT_DATASET = BASE_DIR / 'dataset' / 'Kelps_database_photos' / 'Photos_kelps_database'
-DEFAULT_MODEL = BASE_DIR / 'runs_yolo' / 'kelp' / 'weights' / 'best.pt'
-DEFAULT_OUTPUT = BASE_DIR / 'out'
+REPO_ROOT = Path(__file__).resolve().parent.parent
+DEFAULT_DATASET = REPO_ROOT / 'dataset' / 'Kelps_database_photos' / 'Photos_kelps_database'
+DEFAULT_MODEL = REPO_ROOT / 'runs_yolo' / 'kelp' / 'weights' / 'best.pt'
+DEFAULT_OUTPUT = REPO_ROOT / 'out'
+ALGAS_PATH = REPO_ROOT / 'scripts' / '02_recortar_algas.py'
 YOLO_SUPPORTED_EXTS = {'.jpg', '.jpeg', '.png', '.tif', '.tiff', '.bmp', '.pfm', '.webp', '.dng', '.heic', '.mpo'}
+
+
+def cargar_detector():
+    if not ALGAS_PATH.exists():
+        raise SystemExit(f"No se encontró el script de detección: {ALGAS_PATH}")
+    spec = spec_from_file_location("recortar_algas", ALGAS_PATH)
+    if spec is None or spec.loader is None:
+        raise SystemExit("No se pudo cargar recortar_algas.")
+    module = module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+detector = cargar_detector()
 
 
 def parse_args():

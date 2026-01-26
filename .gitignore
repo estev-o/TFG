@@ -31,3 +31,6 @@ yolov8n.pt
 # OS
 .DS_Store
 Thumbs.db
+
+#out de imágenes normalizadas
+/out_img_norm/

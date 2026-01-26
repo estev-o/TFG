@@ -3,7 +3,7 @@
 Resumen de lo hecho
 --------------------
 
-He implementado y ejecutado un script (`script_filtro.py`) que procesa el archivo
+He implementado y ejecutado un script (`scripts/01_script_filtro.py`) que procesa el archivo
 `dataset/Kelps_database_photos/Photos_kelp_database.xlsx` y genera una versión
 filtrada que contiene únicamente las columnas:
 
@@ -53,7 +53,7 @@ pip install -r requirements.txt
 3. Ejecutar el script desde la raíz del proyecto:
 
 ```bash
-python script_filtro.py
+python scripts/01_script_filtro.py
 ```
 
 Salidas esperadas:

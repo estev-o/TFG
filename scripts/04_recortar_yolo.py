@@ -10,18 +10,35 @@ import argparse
 import random
 import shutil
 import sys
+from importlib.util import module_from_spec, spec_from_file_location
 from pathlib import Path
 from typing import Dict, Optional, Tuple
 
 import cv2
 
-import recortar_algas as detector
-
-BASE_DIR = Path(__file__).parent
-DEFAULT_INPUT = BASE_DIR / 'dataset' / 'Kelps_database_photos' / 'Photos_kelps_database'
+REPO_ROOT = Path(__file__).resolve().parent.parent
+DEFAULT_INPUT = REPO_ROOT / 'dataset' / 'Kelps_database_photos' / 'Photos_kelps_database'
+DEFAULT_OUTPUT = REPO_ROOT / 'yolo'
+ALGAS_PATH = REPO_ROOT / 'scripts' / '02_recortar_algas.py'
 CLASS_ID = 0
 CLASS_NAME = 'alga'
 DEFAULT_SCREEN_FALLBACK = (1920, 1080)
+
+
+def cargar_detector():
+    if not ALGAS_PATH.exists():
+        print(f"ERROR: No se encontró el script de detección: {ALGAS_PATH}")
+        sys.exit(1)
+    spec = spec_from_file_location("recortar_algas", ALGAS_PATH)
+    if spec is None or spec.loader is None:
+        print("ERROR: No se pudo cargar recortar_algas.")
+        sys.exit(1)
+    module = module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+detector = cargar_detector()
 
 
 def parse_args():
@@ -37,7 +54,7 @@ def parse_args():
     parser.add_argument(
         '--output_dir',
         type=str,
-        default='yolo',
+        default=str(DEFAULT_OUTPUT),
         help='Directorio base para el dataset YOLO (se crearán images/ y labels/)'
     )
     parser.add_argument(
@@ -135,7 +152,7 @@ def escribir_data_yaml(base_dir: Path) -> Path:
     yaml_path = base_dir / 'data.yaml'
     contenido = "\n".join(
         [
-            "# Dataset auto-generado con recortar_yolo.py",
+            "# Dataset auto-generado con scripts/04_recortar_yolo.py",
             f"path: {base_dir.resolve()}",
             "train: images/train",
             "val: images/val",

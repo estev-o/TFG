@@ -12,11 +12,11 @@ import sys
 import argparse
 import pandas as pd
 
-BASE = Path(__file__).parent
-INPUT = BASE / 'dataset' / 'Kelps_database_photos' / 'Photos_kelp_database.xlsx'
-OUT_CSV = BASE / 'dataset' / 'kelp_photos_filtered.csv'
-OUT_XLSX = BASE / 'dataset' / 'kelp_photos_filtered.xlsx'
-PHOTOS_DIR = BASE / 'dataset' / 'Kelps_database_photos' / 'Photos_kelps_database'
+REPO_ROOT = Path(__file__).resolve().parent.parent
+INPUT = REPO_ROOT / 'dataset' / 'Kelps_database_photos' / 'Photos_kelp_database.xlsx'
+OUT_CSV = REPO_ROOT / 'dataset' / 'kelp_photos_filtered.csv'
+OUT_XLSX = REPO_ROOT / 'dataset' / 'kelp_photos_filtered.xlsx'
+PHOTOS_DIR = REPO_ROOT / 'dataset' / 'Kelps_database_photos' / 'Photos_kelps_database'
 PHOTO_EXTS = {'.jfif', '.jpg', '.jpeg', '.png', '.heic'}
 
 
