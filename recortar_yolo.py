@@ -21,6 +21,7 @@ BASE_DIR = Path(__file__).parent
 DEFAULT_INPUT = BASE_DIR / 'dataset' / 'Kelps_database_photos' / 'Photos_kelps_database'
 CLASS_ID = 0
 CLASS_NAME = 'alga'
+DEFAULT_SCREEN_FALLBACK = (1920, 1080)
 
 
 def parse_args():
@@ -147,6 +148,21 @@ def escribir_data_yaml(base_dir: Path) -> Path:
     return yaml_path
 
 
+def obtener_tamaño_pantalla():
+    """Devuelve (ancho, alto) de la pantalla principal o None si no se pudo."""
+    try:
+        import tkinter as tk  # stdlib
+
+        root = tk.Tk()
+        root.withdraw()
+        ancho = root.winfo_screenwidth()
+        alto = root.winfo_screenheight()
+        root.destroy()
+        return ancho, alto
+    except Exception:
+        return None
+
+
 def revisar_manual(
     imagen, bbox: Tuple[int, int, int, int], nombre: str, max_dim: int
 ) -> Optional[bool]:
@@ -162,9 +178,20 @@ def revisar_manual(
         nueva_w = int(vista.shape[1] * escala)
         nueva_h = int(vista.shape[0] * escala)
         vista = cv2.resize(vista, (nueva_w, nueva_h), interpolation=cv2.INTER_AREA)
-    cv2.imshow(f"Revision {nombre}", vista)
+    win_name = f"Revision {nombre}"
+    cv2.imshow(win_name, vista)
+
+    # Intentar centrar la ventana considerando el tamaño final
+    screen_size = obtener_tamaño_pantalla() or DEFAULT_SCREEN_FALLBACK
+    if screen_size:
+        win_h, win_w = vista.shape[:2]
+        scr_w, scr_h = screen_size
+        x = max(0, (scr_w - win_w) // 2)
+        y = max(0, (scr_h - win_h) // 2)
+        cv2.moveWindow(win_name, x, y)
+
     key = cv2.waitKey(0) & 0xFF
-    cv2.destroyWindow(f"Revision {nombre}")
+    cv2.destroyWindow(win_name)
 
     if key in (13, 10, ord('y'), ord('s'), ord(' ')):  # Enter, espacio o yes/sí
         return True

@@ -83,7 +83,7 @@ run2_debug_individual: ## Debug de una imagen específica (ej: make run2_debug_i
 # run3 args: N=num_samples, VAL=val_split, REVIEW=--review para modo interactivo, REVIEW_MAX=900
 run3: ## Genera dataset YOLO (yolo/images+labels y data.yaml)
 	@echo "$(BLUE)Generando dataset para YOLO con $(N) imágenes (val_split=$(VAL))...$(NC)"
-	$(PYTHON) $(SCRIPT_YOLO) --num_samples $(N) --val_split $(VAL) --overwrite $(if $(REVIEW),$(REVIEW) --review_max_size $(REVIEW_MAX),)
+	$(PYTHON) $(SCRIPT_YOLO) --val_split $(VAL) --overwrite --review
 	@echo "$(GREEN)Dataset YOLO listo en yolo/$(NC)"
 
 # train_yolo args: YOLO_MODEL=yolov8n.pt YOLO_DATA=yolo/data.yaml YOLO_EPOCHS YOLO_BATCH YOLO_IMG YOLO_DEVICE
