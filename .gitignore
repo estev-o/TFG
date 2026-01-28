@@ -34,3 +34,6 @@ Thumbs.db
 
 #out de imágenes normalizadas
 /out_img_norm/
+
+# directorio de imágenes de yoloseg
+/imgs_segment_yoloseg/
