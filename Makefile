@@ -29,7 +29,8 @@ APPLY_DEVICE ?= cpu
 NORM_INPUT ?= out/out
 NORM_CSV ?= dataset/kelp_photos_filtered.csv
 NORM_OUTPUT ?= out_img_norm
-NORM_BG ?= 127
+NORM_DEBUG ?= out_img_norm_debug
+NORM_OPEN_KERNEL ?= 3
 
 # Colores para output
 BLUE = \033[0;34m
@@ -103,8 +104,8 @@ apply_yolo: ## Aplica YOLO a imágenes aleatorias y recorta a $(OUTPUT_DIR)/
 	$(PYTHON) $(SCRIPT_APPLY) --model $(APPLY_MODEL) --dataset $(APPLY_DATASET) --num_images $(APPLY_NUM) --imgsz $(APPLY_IMG) --output_dir $(APPLY_OUT) --device $(APPLY_DEVICE)
 	@echo "$(GREEN)Recortes guardados en $(APPLY_OUT)/$(NC)"
 
-# normalize_out args: NORM_INPUT NORM_CSV NORM_OUTPUT NORM_BG
-normalize_out: ## Normaliza recortes y filtra por CSV
-	@echo "$(BLUE)Normalizando recortes en $(NORM_INPUT) usando $(NORM_CSV)...$(NC)"
-	$(PYTHON) $(SCRIPT_NORM) --input_dir $(NORM_INPUT) --csv $(NORM_CSV) --output_dir $(NORM_OUTPUT) --bg $(NORM_BG)
-	@echo "$(GREEN)Normalización completa en $(NORM_OUTPUT)/$(NC)"
+# normalize_out args: NORM_INPUT NORM_CSV NORM_OUTPUT NORM_DEBUG NORM_OPEN_KERNEL
+normalize_out: ## Genera máscaras binarias (alga=255, fondo=0) + paneles debug
+	@echo "$(BLUE)Normalizando recortes en $(NORM_INPUT) usando $(NORM_CSV) (open_kernel=$(NORM_OPEN_KERNEL))...$(NC)"
+	$(PYTHON) $(SCRIPT_NORM) --input_dir $(NORM_INPUT) --csv $(NORM_CSV) --output_dir $(NORM_OUTPUT) --debug_dir $(NORM_DEBUG) --open_kernel $(NORM_OPEN_KERNEL)
+	@echo "$(GREEN)Normalización completa en $(NORM_OUTPUT)/ y debug en $(NORM_DEBUG)/$(NC)"

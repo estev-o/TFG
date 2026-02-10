@@ -13,3 +13,21 @@
 - Corregir imperfecciones
 - Repetir
 Hoy segmenté 23 imágenes
+
+NOTAS DE LA REUNIÓN:
+La segmentación de nuestro yolo actual es suficiente, no es necesario entrenar un YOLO mayor de momento. Tampoco debemos cambiar el YOLO usado por un YOLO-seg.
+El objetivo ahora es sacar la máscara de las algas normalizadas modificando 07_normalizar_recorte.py para quitar letras y reglas para que quede solo una máscara de el alga como entrada de la CNN:
+1. Todas imágenes de mismo tamaño -> Lo hacemos con 2 pasadas a el dataset. 1 para buscar la mayor y otra para normalizar (añadiendo color fondo) todas las imágenes para no perder calidad
+2. Binarización de Alga / fondo
+
+2026-02-10
+Implementé la nueva normalización del recorte de YOLO en 07_normalizar_recorte.py con estos cambios:
+ejecuté:
+$ make apply_yolo APPLY_MODEL=runs_yolo/kelp4/weights/best.pt APPLY_NUM=0
+para aplicar el YOLO a el dataset (lo había borrado antes)
+
+el output fué:
+Recortes guardados: 4705
+Sin detección: 37
+Errores: 155
+Salida: out

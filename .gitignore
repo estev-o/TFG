@@ -36,4 +36,4 @@ Thumbs.db
 /out_img_norm/
 
 # directorio de imágenes de yoloseg
-/imgs_segment_yoloseg/
+/dateset-segmentado/
