@@ -29,8 +29,9 @@ APPLY_DEVICE ?= cpu
 NORM_INPUT ?= out/out
 NORM_CSV ?= dataset/kelp_photos_filtered.csv
 NORM_OUTPUT ?= out_img_norm
-NORM_DEBUG ?= out_img_norm_debug
-NORM_OPEN_KERNEL ?= 3
+NORM_OPEN_KERNEL ?= 1
+NORM_KEEP_REL ?= 0.25
+NORM_DEBUG ?= 0
 
 # Colores para output
 BLUE = \033[0;34m
@@ -104,8 +105,15 @@ apply_yolo: ## Aplica YOLO a imágenes aleatorias y recorta a $(OUTPUT_DIR)/
 	$(PYTHON) $(SCRIPT_APPLY) --model $(APPLY_MODEL) --dataset $(APPLY_DATASET) --num_images $(APPLY_NUM) --imgsz $(APPLY_IMG) --output_dir $(APPLY_OUT) --device $(APPLY_DEVICE)
 	@echo "$(GREEN)Recortes guardados en $(APPLY_OUT)/$(NC)"
 
-# normalize_out args: NORM_INPUT NORM_CSV NORM_OUTPUT NORM_DEBUG NORM_OPEN_KERNEL
-normalize_out: ## Genera máscaras binarias (alga=255, fondo=0) + paneles debug
-	@echo "$(BLUE)Normalizando recortes en $(NORM_INPUT) usando $(NORM_CSV) (open_kernel=$(NORM_OPEN_KERNEL))...$(NC)"
-	$(PYTHON) $(SCRIPT_NORM) --input_dir $(NORM_INPUT) --csv $(NORM_CSV) --output_dir $(NORM_OUTPUT) --debug_dir $(NORM_DEBUG) --open_kernel $(NORM_OPEN_KERNEL)
-	@echo "$(GREEN)Normalización completa en $(NORM_OUTPUT)/ y debug en $(NORM_DEBUG)/$(NC)"
+# normalize_out args: NORM_INPUT NORM_CSV NORM_OUTPUT NORM_OPEN_KERNEL NORM_KEEP_REL NORM_DEBUG(0|1)
+normalize_out: ## Genera máscaras binarias en NORM_OUTPUT (debug opcional en la misma carpeta)
+	@if [ -z "$(NORM_OUTPUT)" ] || [ "$(NORM_OUTPUT)" = "/" ] || [ "$(NORM_OUTPUT)" = "." ]; then \
+		echo "$(YELLOW)Error: NORM_OUTPUT inválido ($(NORM_OUTPUT))$(NC)"; \
+		exit 1; \
+	fi
+	@echo "$(YELLOW)Limpiando $(NORM_OUTPUT)/ antes de normalizar...$(NC)"
+	@mkdir -p $(NORM_OUTPUT)
+	@find $(NORM_OUTPUT) -mindepth 1 -maxdepth 1 -exec rm -rf {} +
+	@echo "$(BLUE)Normalizando recortes en $(NORM_INPUT) usando $(NORM_CSV) (open_kernel=$(NORM_OPEN_KERNEL), keep_rel=$(NORM_KEEP_REL), debug=$(NORM_DEBUG))...$(NC)"
+	$(PYTHON) $(SCRIPT_NORM) --input_dir $(NORM_INPUT) --csv $(NORM_CSV) --output_dir $(NORM_OUTPUT) --open_kernel $(NORM_OPEN_KERNEL) --keep_rel $(NORM_KEEP_REL) $(if $(filter 1 true TRUE yes YES,$(NORM_DEBUG)),--debug,)
+	@echo "$(GREEN)Normalización completa en $(NORM_OUTPUT)/$(NC)"

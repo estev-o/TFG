@@ -31,3 +31,18 @@ Recortes guardados: 4705
 Sin detección: 37
 Errores: 155
 Salida: out
+
+ejecuté:
+$ make normalize_out NORM_INPUT=out NORM_OUTPUT=out_img_norm NORM_DEBUG=1
+para ver como iba, como vi que el debug daba bien le di una pasada a todo el dataset
+$ make normalize_out NORM_INPUT=out NORM_OUTPUT=out_img_norm NORM_DEBUG=0
+
+output:
+  Imágenes encontradas: 4704
+  Con match CSV: 3583
+  Sin match CSV: 1121
+  Ilegibles: 0
+  Sin máscara válida: 0
+  Tamaño objetivo: 4496x4496
+  Guardadas: 3583
+  Salida: out_img_norm
