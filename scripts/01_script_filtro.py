@@ -158,10 +158,8 @@ def main():
 	out = out.dropna(subset=['HPI', 'IVR'])
 	dropped_non_numeric = before_drop_non_numeric - len(out)
 
-	# Eliminar filas donde ambos HPI e IVR son 0
-	before_drop_both_zero = len(out)
-	out = out[~((out['HPI'] == 0) & (out['IVR'] == 0))].copy()
-	dropped_both_zero = before_drop_both_zero - len(out)
+	# Mantener filas donde ambos HPI e IVR son 0 para entrenar también casos sin mordida
+	both_zero_rows = int(((out['HPI'] == 0) & (out['IVR'] == 0)).sum())
 
 	out.to_csv(OUT_CSV, index=False)
 	out.to_excel(OUT_XLSX, index=False)
@@ -169,7 +167,7 @@ def main():
 	print(f'Salida escrita: {OUT_CSV}  ({len(out)} filas)')
 	print(f'Salida escrita: {OUT_XLSX}  ({len(out)} filas)')
 	print(f'Filas eliminadas por valores no numéricos: {dropped_non_numeric}')
-	print(f'Filas eliminadas donde HPI e IVR eran ambos 0: {dropped_both_zero}')
+	print(f'Filas con HPI e IVR ambos 0 conservadas: {both_zero_rows}')
 
 	limpiar_fotos(out, dry_run=args.dry_run)
 

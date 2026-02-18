@@ -46,3 +46,35 @@ output:
   Tamaño objetivo: 4496x4496
   Guardadas: 3583
   Salida: out_img_norm
+
+2026-02-14
+Nos dimos cuenta de un fallo crítico, habíamos borrado del CSV todas las imágenes que tenían dos 0 (no tenían ningún tipo de mordida). Aunque pensábamos que no eran relevantes, es necesario que el sistema aprenda también en qué casos poner 0, para ello se debe entrenar ese tipo de algas también.
+
+Cambié 01_script_filtro.py para que no borre las que tiene dos filas como 0:
+$ make run1
+
+output:
+  Salida escrita: /home/estevo/TFG/dataset/kelp_photos_filtered.csv  (5486 filas)
+  Salida escrita: /home/estevo/TFG/dataset/kelp_photos_filtered.xlsx  (5486 filas)
+  Filas eliminadas por valores no numéricos: 4
+  Filas con HPI e IVR ambos 0 conservadas: 1364
+  Revisión de /home/estevo/TFG/dataset/Kelps_database_photos/Photos_kelps_database: 4984 archivos de imagen, 7 eliminados, 4977 quedan, 0 ignorados por extensión
+
+Ahora, con este cambio debemos normalizar otra vez las fotos que detectó el YOLO (estas se hicieron sobre el dataset entero, solo se filtra en el paso 07)
+
+$ make normalize_out NORM_INPUT=out NORM_OUTPUT=out_img_norm NORM_DEBUG=0
+
+output:
+  Imágenes encontradas: 4704
+  Con match CSV: 4699
+  Sin match CSV: 5
+  Ilegibles: 0
+  Sin máscara válida: 0
+  Tamaño objetivo: 4496x4496
+  Guardadas: 4699
+  Salida: out_img_norm
+
+2026-02-18
+Como revisión final. Le he dado una vuelta a mano a todas las imágenes para quitar las imágenes que estaban mal segmentadas o que fallara en detectar alga
+Eliminé 51 imágenes, la mayoría con segmentación fuera del alga.
+Como nota, quizás es relevante ver que en un número signfificante de imágenes se segmenta parte de la sombra del alga como si fuese alga,  también en algunas las líneas negras rectas de la separación entre mesas. Esto puede ser negativo para el entrenamiento?¿?¿?¿?¿??¿¿??
