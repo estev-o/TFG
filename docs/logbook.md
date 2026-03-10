@@ -78,3 +78,13 @@ output:
 Como revisión final. Le he dado una vuelta a mano a todas las imágenes para quitar las imágenes que estaban mal segmentadas o que fallara en detectar alga
 Eliminé 51 imágenes, la mayoría con segmentación fuera del alga.
 Como nota, quizás es relevante ver que en un número signfificante de imágenes se segmenta parte de la sombra del alga como si fuese alga,  también en algunas las líneas negras rectas de la separación entre mesas. Esto puede ser negativo para el entrenamiento?¿?¿?¿?¿??¿¿??
+
+2026-03-10
+Preparación de datos para la fase CNN:
+1. Creé cnn/08_build_split_manifest.py para hacer en un único paso el cruce etiqueta-imagen y generar manifest.csv + splits/train,val,test
+2. Ejecuté `make cnn_prepare` y quedó: `manifest=4648`, `train=3253`, `val=697`, `test=698`.
+
+2026-03-10
+Entrenamiento base CNN:
+1. Implementé `cnn/9_train_regression.py` para regresión de 2 salidas (`hpi`, `ivr`) y añadí targets de Makefile para entrenar (`cnn_train`) y prueba rápida (`cnn_smoke`).
+2. Ejecuté `make cnn_smoke` (CPU, 1 época, subset pequeño) para validar pipeline end-to-end y se generaron checkpoints + `metrics.csv` en `cnn/runs/smoke`.

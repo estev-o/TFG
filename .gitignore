@@ -37,3 +37,9 @@ Thumbs.db
 
 # directorio de imágenes de yoloseg
 /dateset-segmentado/
+
+#Openvpn
+*.ovpn
+
+# runs de cnn   
+/cnn/runs/
