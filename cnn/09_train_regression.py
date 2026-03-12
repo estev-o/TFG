@@ -46,6 +46,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--amp", action="store_true")
     parser.add_argument("--max-train-samples", type=int, default=0)
     parser.add_argument("--max-val-samples", type=int, default=0)
+    parser.add_argument("--plot-metrics-csv", default="", help="Solo genera gráfica desde un metrics.csv y termina")
+    parser.add_argument("--plot-output", default="", help="Salida PNG para --plot-metrics-csv")
     return parser.parse_args()
 
 
@@ -203,8 +205,79 @@ def save_metrics_csv(path: Path, metrics: Iterable[EpochMetrics]) -> None:
             writer.writerow(asdict(m))
 
 
+def save_training_plot(metrics: list[EpochMetrics], output: Path) -> bool:
+    try:
+        import matplotlib
+
+        matplotlib.use("Agg")
+        import matplotlib.pyplot as plt
+    except ImportError:
+        print("Aviso: no se pudo generar gráfica (falta matplotlib).")
+        return False
+
+    if not metrics:
+        return False
+
+    epochs = [m.epoch for m in metrics]
+    train_loss = [m.train_loss for m in metrics]
+    val_loss = [m.val_loss for m in metrics]
+    mae_hpi = [m.mae_hpi for m in metrics]
+    mae_ivr = [m.mae_ivr for m in metrics]
+    mae_mean = [m.mae_mean for m in metrics]
+
+    fig, axes = plt.subplots(1, 2, figsize=(12, 4))
+
+    axes[0].plot(epochs, train_loss, marker="o", label="train_loss")
+    axes[0].plot(epochs, val_loss, marker="o", label="val_loss")
+    axes[0].set_title("Loss")
+    axes[0].set_xlabel("Epoch")
+    axes[0].set_ylabel("Loss")
+    axes[0].grid(True, alpha=0.3)
+    axes[0].legend()
+
+    axes[1].plot(epochs, mae_hpi, marker="o", label="mae_hpi")
+    axes[1].plot(epochs, mae_ivr, marker="o", label="mae_ivr")
+    axes[1].plot(epochs, mae_mean, marker="o", label="mae_mean")
+    axes[1].set_title("MAE")
+    axes[1].set_xlabel("Epoch")
+    axes[1].set_ylabel("MAE")
+    axes[1].grid(True, alpha=0.3)
+    axes[1].legend()
+
+    fig.tight_layout()
+    output.parent.mkdir(parents=True, exist_ok=True)
+    fig.savefig(output, dpi=150)
+    return True
+
+
+def load_metrics_csv(path: Path) -> list[EpochMetrics]:
+    metrics: list[EpochMetrics] = []
+    with path.open(newline="", encoding="utf-8") as f:
+        reader = csv.DictReader(f)
+        for row in reader:
+            metrics.append(
+                EpochMetrics(
+                    epoch=int(float(row["epoch"])),
+                    train_loss=float(row["train_loss"]),
+                    val_loss=float(row["val_loss"]),
+                    mae_hpi=float(row["mae_hpi"]),
+                    mae_ivr=float(row["mae_ivr"]),
+                    mae_mean=float(row["mae_mean"]),
+                )
+            )
+    return metrics
+
+
 def main() -> None:
     args = parse_args()
+    if args.plot_metrics_csv:
+        metrics_path = Path(args.plot_metrics_csv)
+        plot_path = Path(args.plot_output) if args.plot_output else metrics_path.parent / "training_curves.png"
+        metrics = load_metrics_csv(metrics_path)
+        if save_training_plot(metrics, plot_path):
+            print(f"Gráfica de entrenamiento guardada en: {plot_path}")
+        return
+
     out_dir = Path(args.out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
 
@@ -287,6 +360,10 @@ def main() -> None:
             f"[{epoch:03d}/{args.epochs}] train_loss={train_loss:.4f} val_loss={val_loss:.4f} "
             f"mae_hpi={mae_hpi:.4f} mae_ivr={mae_ivr:.4f} mae_mean={mae_mean:.4f}"
         )
+
+    plot_path = out_dir / "training_curves.png"
+    if save_training_plot(history, plot_path):
+        print(f"Gráfica de entrenamiento guardada en: {plot_path}")
 
     print(f"Entrenamiento finalizado. Mejor mae_mean={best_mae:.4f}. Salida: {out_dir}")
 

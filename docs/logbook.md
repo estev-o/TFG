@@ -88,3 +88,20 @@ Preparación de datos para la fase CNN:
 Entrenamiento base CNN:
 1. Implementé `cnn/9_train_regression.py` para regresión de 2 salidas (`hpi`, `ivr`) y añadí targets de Makefile para entrenar (`cnn_train`) y prueba rápida (`cnn_smoke`).
 2. Ejecuté `make cnn_smoke` (CPU, 1 época, subset pequeño) para validar pipeline end-to-end y se generaron checkpoints + `metrics.csv` en `cnn/runs/smoke`.
+
+2026-03-11
+Primer entrenamiento real CNN (EfficientNet-B0, 30 epochs, pretrained, GPU):
+1. Mejor validación en epoch 18: `mae_mean=1.2671`, `mae_hpi=0.6875`, `mae_ivr=1.8467`.
+2. Epoch final (30): `mae_mean=1.3782` (ligero sobreajuste al final).
+
+Métricas que usaremos para comparar los 3 modelos:
+- `mae_mean` (principal): promedio del error absoluto de HPI e IVR. Menor es mejor.
+- `mae_hpi`: error absoluto medio en la predicción de mordidas de peces (HPI). Menor es mejor.
+- `mae_ivr`: error absoluto medio en la predicción de mordidas de invertebrados (IVR). Menor es mejor.
+- `val_loss` (secundaria): pérdida en validación para ver estabilidad y detectar sobreajuste. Menor es mejor.
+2026-03-12
+Segundo entrenamiento real CNN (ResNet18, 30 epochs, pretrained, GPU):
+1. Ejecuté: `make cnn_train CNN_DEVICE=cuda CNN_MODEL=resnet18 CNN_PRETRAINED=1 CNN_EPOCHS=30 CNN_BATCH=4 CNN_AMP=1 CNN_WORKERS=2 CNN_RUN_DIR=cnn/runs/real_resnet18_e30`
+2. Mejor validación en epoch 19: `mae_mean=1.3386`, `mae_hpi=0.6859`, `mae_ivr=1.9912`.
+3. Epoch final (30): `mae_mean=1.3881`.
+2026-02-12
