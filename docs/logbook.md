@@ -104,4 +104,19 @@ Segundo entrenamiento real CNN (ResNet18, 30 epochs, pretrained, GPU):
 1. Ejecuté: `make cnn_train CNN_DEVICE=cuda CNN_MODEL=resnet18 CNN_PRETRAINED=1 CNN_EPOCHS=30 CNN_BATCH=4 CNN_AMP=1 CNN_WORKERS=2 CNN_RUN_DIR=cnn/runs/real_resnet18_e30`
 2. Mejor validación en epoch 19: `mae_mean=1.3386`, `mae_hpi=0.6859`, `mae_ivr=1.9912`.
 3. Epoch final (30): `mae_mean=1.3881`.
-2026-02-12
+2026-03-25
+Evaluación en test de las CNN:
+1. Implementé `cnn/10_test_cnn.py` y target `make cnn_test` para inferencia sobre `cnn/splits/test.csv` usando `best.pt` de cada run.
+2. El script guarda en cada run: `test_eval/metrics_test.json`, `test_eval/predictions_test.csv`, `5_real_vs_pred.png` y `5_residuals_hist.png`.
+
+Métricas usadas (breve):
+- `1_mae`: error absoluto medio en puntos de nota (principal; menor es mejor).
+- `2_rmse`: penaliza más errores grandes (menor es mejor).
+- `4_tolerance_accuracy`: porcentaje dentro de ±0.5 y ±1.0 (`acc_hpi`, `acc_ivr`, `acc_both`, `acc_mean`).
+- `5_plots`: visualización real vs pred y distribución de residuales.
+
+Interpretación de las 3 runs en test (checkpoint `best.pt`):
+1. `convnext_tiny`: `mae_mean=1.3034` (`mae_hpi=0.6418`, `mae_ivr=1.9651`) -> mejor rendimiento global.
+2. `efficientnet_b0`: `mae_mean=1.4058` (`mae_hpi=0.7636`, `mae_ivr=2.0479`) -> segundo mejor.
+3. `resnet18`: `mae_mean=1.4560` (`mae_hpi=0.7552`, `mae_ivr=2.1568`) -> tercer mejor.
+4. Patrón común: IVR sigue siendo la salida más difícil (errores mayores que HPI en los tres modelos).

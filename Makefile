@@ -1,4 +1,4 @@
-.PHONY: help clean run1 run1_debug run2 run2_debug run2_all run2_debug_individual run3 train_yolo apply_yolo normalize_out cnn_prepare cnn_train cnn_smoke
+.PHONY: help clean run1 run1_debug run2 run2_debug run2_all run2_debug_individual run3 train_yolo apply_yolo normalize_out cnn_prepare cnn_train cnn_smoke cnn_test
 
 # Variables
 VENV = .venv
@@ -11,6 +11,7 @@ SCRIPT_APPLY = scripts/06_aplicar_yolo.py
 SCRIPT_NORM = scripts/07_normalizar_recortes.py
 SCRIPT_CNN_PREPARE = cnn/08_build_split_manifest.py
 SCRIPT_CNN_TRAIN = cnn/09_train_regression.py
+SCRIPT_CNN_TEST = cnn/10_test_cnn.py
 OUTPUT_DIR = out
 N ?= 10
 VAL ?= 0.2
@@ -60,6 +61,14 @@ CNN_DEVICE ?= auto
 CNN_AMP ?= 0
 CNN_MAX_TRAIN ?= 0
 CNN_MAX_VAL ?= 0
+CNN_TEST_RUN_DIR ?= cnn/runs/real_effb0_e30
+CNN_TEST_CSV ?= cnn/splits/test.csv
+CNN_TEST_CKPT ?= best.pt
+CNN_TEST_MODEL ?=
+CNN_TEST_BATCH ?= 16
+CNN_TEST_WORKERS ?= 4
+CNN_TEST_DEVICE ?= auto
+CNN_TEST_OUT ?=
 
 # Colores para output
 BLUE = \033[0;34m
@@ -160,3 +169,8 @@ cnn_smoke: ## Smoke test CNN rápido (1 época, pocas muestras, CPU)
 	@echo "$(BLUE)Smoke test CNN (rápido)$(NC)"
 	$(PYTHON) $(SCRIPT_CNN_TRAIN) --train-csv $(CNN_TRAIN_CSV) --val-csv $(CNN_VAL_CSV) --out-dir cnn/runs/smoke --model resnet18 --img-size 224 --epochs 1 --batch-size 4 --lr 1e-4 --weight-decay 1e-4 --loss mae --workers 0 --seed $(CNN_SEED) --device cpu --max-train-samples 64 --max-val-samples 32
 	@echo "$(GREEN)Smoke test completado (cnn/runs/smoke)$(NC)"
+
+cnn_test: ## Evalúa una run CNN en el split de test
+	@echo "$(BLUE)Evaluando run CNN en test: $(CNN_TEST_RUN_DIR)$(NC)"
+	$(PYTHON) $(SCRIPT_CNN_TEST) --run-dir $(CNN_TEST_RUN_DIR) --test-csv $(CNN_TEST_CSV) --checkpoint $(CNN_TEST_CKPT) --batch-size $(CNN_TEST_BATCH) --workers $(CNN_TEST_WORKERS) --device $(CNN_TEST_DEVICE) $(if $(CNN_TEST_MODEL),--model $(CNN_TEST_MODEL),) $(if $(CNN_TEST_OUT),--output-dir $(CNN_TEST_OUT),)
+	@echo "$(GREEN)Test completado para $(CNN_TEST_RUN_DIR)$(NC)"
