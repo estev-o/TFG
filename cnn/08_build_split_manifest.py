@@ -36,6 +36,17 @@ def write_rows(path: Path, fieldnames: list[str], rows: list[dict[str, object]])
         writer.writerows(rows)
 
 
+def parse_int_score(value: str, field_name: str, photo_code: str) -> int:
+    try:
+        numeric = float(value)
+    except ValueError as exc:
+        raise ValueError(f"Valor no numerico en {field_name} para {photo_code}: {value!r}") from exc
+
+    if not numeric.is_integer():
+        raise ValueError(f"Valor no entero en {field_name} para {photo_code}: {numeric}")
+    return int(numeric)
+
+
 def build_manifest_rows(labels_csv: Path, images_dir: Path, pattern: str) -> list[dict[str, object]]:
     image_by_code: dict[str, Path] = {}
     for image_path in sorted(images_dir.glob(pattern)):
@@ -53,8 +64,8 @@ def build_manifest_rows(labels_csv: Path, images_dir: Path, pattern: str) -> lis
                 {
                     "photo_cod": code,
                     "image_path": image_path.as_posix(),
-                    "hpi": float(row["HPI"]),
-                    "ivr": float(row["IVR"]),
+                    "hpi": parse_int_score(row["HPI"], "HPI", code),
+                    "ivr": parse_int_score(row["IVR"], "IVR", code),
                 }
             )
     return rows

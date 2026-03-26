@@ -120,3 +120,10 @@ Interpretación de las 3 runs en test (checkpoint `best.pt`):
 2. `efficientnet_b0`: `mae_mean=1.4058` (`mae_hpi=0.7636`, `mae_ivr=2.0479`) -> segundo mejor.
 3. `resnet18`: `mae_mean=1.4560` (`mae_hpi=0.7552`, `mae_ivr=2.1568`) -> tercer mejor.
 4. Patrón común: IVR sigue siendo la salida más difícil (errores mayores que HPI en los tres modelos).
+2026-03-25
+Nos hemos dado cuenta de que había que usar int para la métrica de expertos y no float, hay que reentrenar. Pero como sabemos que la mejor es ConvNeXT nos ahorra algo de trabajo.
+2026-03-25
+Ajuste del flujo de reentrenamiento:
+1. Se mantiene `ConvNeXt-Tiny` y se separa el entrenamiento en 3 runs: `hpi`, `ivr` y `both`.
+2. Se confirma uso de `CNN_AMP=1` (mixed precision en CUDA) para reducir VRAM y acelerar.
+3. Siguiente paso: lanzar los 3 entrenamientos y luego `cnn_test` por cada run para comparar en test.

@@ -11,6 +11,7 @@ from pathlib import Path
 import sys
 import argparse
 import pandas as pd
+import numpy as np
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 INPUT = REPO_ROOT / 'dataset' / 'Kelps_database_photos' / 'Photos_kelp_database.xlsx'
@@ -157,6 +158,21 @@ def main():
 	before_drop_non_numeric = len(out)
 	out = out.dropna(subset=['HPI', 'IVR'])
 	dropped_non_numeric = before_drop_non_numeric - len(out)
+
+	# Validar que HPI e IVR son enteros (se permiten valores tipo 2.0, no 2.5)
+	hpi_ok = np.isclose(out['HPI'], np.round(out['HPI']), atol=1e-9)
+	ivr_ok = np.isclose(out['IVR'], np.round(out['IVR']), atol=1e-9)
+	non_int_rows = out[~(hpi_ok & ivr_ok)]
+	if not non_int_rows.empty:
+		example = non_int_rows[['Photo_cod', 'HPI', 'IVR']].head(10)
+		print('ERROR: Se encontraron etiquetas no enteras en HPI/IVR.')
+		print('Ejemplos (primeras 10 filas):')
+		print(example.to_string(index=False))
+		sys.exit(5)
+
+	# Convertir definitivamente a enteros
+	out['HPI'] = np.round(out['HPI']).astype(int)
+	out['IVR'] = np.round(out['IVR']).astype(int)
 
 	# Mantener filas donde ambos HPI e IVR son 0 para entrenar también casos sin mordida
 	both_zero_rows = int(((out['HPI'] == 0) & (out['IVR'] == 0)).sum())

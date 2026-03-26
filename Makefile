@@ -1,4 +1,4 @@
-.PHONY: help clean run1 run1_debug run2 run2_debug run2_all run2_debug_individual run3 train_yolo apply_yolo normalize_out cnn_prepare cnn_train cnn_smoke cnn_test
+.PHONY: help clean run1 run1_debug run2 run2_debug run2_all run2_debug_individual run3 train_yolo apply_yolo normalize_out cnn_prepare cnn_train cnn_smoke cnn_test cnn_train_hpi cnn_train_ivr cnn_train_both
 
 # Variables
 VENV = .venv
@@ -46,7 +46,8 @@ CNN_TEST_RATIO ?= 0.15
 CNN_SEED ?= 42
 CNN_TRAIN_CSV ?= cnn/splits/train.csv
 CNN_VAL_CSV ?= cnn/splits/val.csv
-CNN_RUN_DIR ?= cnn/runs/baseline
+CNN_TARGET ?= both
+CNN_RUN_DIR ?= cnn/runs/baseline_$(CNN_TARGET)
 CNN_MODEL ?= resnet18
 CNN_PRETRAINED ?= 0
 CNN_EPOCHS ?= 20
@@ -65,6 +66,7 @@ CNN_TEST_RUN_DIR ?= cnn/runs/real_effb0_e30
 CNN_TEST_CSV ?= cnn/splits/test.csv
 CNN_TEST_CKPT ?= best.pt
 CNN_TEST_MODEL ?=
+CNN_TEST_TARGET ?= auto
 CNN_TEST_BATCH ?= 16
 CNN_TEST_WORKERS ?= 4
 CNN_TEST_DEVICE ?= auto
@@ -161,16 +163,25 @@ cnn_prepare: ## Genera manifest.csv y train/val/test para CNN en un único paso
 	@echo "$(GREEN)CNN preparada: $(CNN_MANIFEST) y $(CNN_SPLIT_DIR)/{train,val,test}.csv$(NC)"
 
 cnn_train: ## Entrena la CNN de regresión (HPI, IVR)
-	@echo "$(BLUE)Entrenando CNN $(CNN_MODEL) en $(CNN_DEVICE) (epochs=$(CNN_EPOCHS), batch=$(CNN_BATCH))...$(NC)"
-	$(PYTHON) $(SCRIPT_CNN_TRAIN) --train-csv $(CNN_TRAIN_CSV) --val-csv $(CNN_VAL_CSV) --out-dir $(CNN_RUN_DIR) --model $(CNN_MODEL) --img-size $(CNN_IMG) --epochs $(CNN_EPOCHS) --batch-size $(CNN_BATCH) --lr $(CNN_LR) --weight-decay $(CNN_WD) --loss $(CNN_LOSS) --huber-delta $(CNN_HUBER_DELTA) --workers $(CNN_WORKERS) --seed $(CNN_SEED) --device $(CNN_DEVICE) --max-train-samples $(CNN_MAX_TRAIN) --max-val-samples $(CNN_MAX_VAL) $(if $(filter 1 true TRUE yes YES,$(CNN_PRETRAINED)),--pretrained,) $(if $(filter 1 true TRUE yes YES,$(CNN_AMP)),--amp,)
+	@echo "$(BLUE)Entrenando CNN $(CNN_MODEL) target=$(CNN_TARGET) en $(CNN_DEVICE) (epochs=$(CNN_EPOCHS), batch=$(CNN_BATCH))...$(NC)"
+	$(PYTHON) $(SCRIPT_CNN_TRAIN) --train-csv $(CNN_TRAIN_CSV) --val-csv $(CNN_VAL_CSV) --out-dir $(CNN_RUN_DIR) --model $(CNN_MODEL) --target $(CNN_TARGET) --img-size $(CNN_IMG) --epochs $(CNN_EPOCHS) --batch-size $(CNN_BATCH) --lr $(CNN_LR) --weight-decay $(CNN_WD) --loss $(CNN_LOSS) --huber-delta $(CNN_HUBER_DELTA) --workers $(CNN_WORKERS) --seed $(CNN_SEED) --device $(CNN_DEVICE) --max-train-samples $(CNN_MAX_TRAIN) --max-val-samples $(CNN_MAX_VAL) $(if $(filter 1 true TRUE yes YES,$(CNN_PRETRAINED)),--pretrained,) $(if $(filter 1 true TRUE yes YES,$(CNN_AMP)),--amp,)
 	@echo "$(GREEN)Entrenamiento CNN finalizado. Salida: $(CNN_RUN_DIR)$(NC)"
 
 cnn_smoke: ## Smoke test CNN rápido (1 época, pocas muestras, CPU)
 	@echo "$(BLUE)Smoke test CNN (rápido)$(NC)"
-	$(PYTHON) $(SCRIPT_CNN_TRAIN) --train-csv $(CNN_TRAIN_CSV) --val-csv $(CNN_VAL_CSV) --out-dir cnn/runs/smoke --model resnet18 --img-size 224 --epochs 1 --batch-size 4 --lr 1e-4 --weight-decay 1e-4 --loss mae --workers 0 --seed $(CNN_SEED) --device cpu --max-train-samples 64 --max-val-samples 32
+	$(PYTHON) $(SCRIPT_CNN_TRAIN) --train-csv $(CNN_TRAIN_CSV) --val-csv $(CNN_VAL_CSV) --out-dir cnn/runs/smoke --model resnet18 --target both --img-size 224 --epochs 1 --batch-size 4 --lr 1e-4 --weight-decay 1e-4 --loss mae --workers 0 --seed $(CNN_SEED) --device cpu --max-train-samples 64 --max-val-samples 32
 	@echo "$(GREEN)Smoke test completado (cnn/runs/smoke)$(NC)"
 
 cnn_test: ## Evalúa una run CNN en el split de test
 	@echo "$(BLUE)Evaluando run CNN en test: $(CNN_TEST_RUN_DIR)$(NC)"
-	$(PYTHON) $(SCRIPT_CNN_TEST) --run-dir $(CNN_TEST_RUN_DIR) --test-csv $(CNN_TEST_CSV) --checkpoint $(CNN_TEST_CKPT) --batch-size $(CNN_TEST_BATCH) --workers $(CNN_TEST_WORKERS) --device $(CNN_TEST_DEVICE) $(if $(CNN_TEST_MODEL),--model $(CNN_TEST_MODEL),) $(if $(CNN_TEST_OUT),--output-dir $(CNN_TEST_OUT),)
+	$(PYTHON) $(SCRIPT_CNN_TEST) --run-dir $(CNN_TEST_RUN_DIR) --test-csv $(CNN_TEST_CSV) --checkpoint $(CNN_TEST_CKPT) --batch-size $(CNN_TEST_BATCH) --workers $(CNN_TEST_WORKERS) --device $(CNN_TEST_DEVICE) --target $(CNN_TEST_TARGET) $(if $(CNN_TEST_MODEL),--model $(CNN_TEST_MODEL),) $(if $(CNN_TEST_OUT),--output-dir $(CNN_TEST_OUT),)
 	@echo "$(GREEN)Test completado para $(CNN_TEST_RUN_DIR)$(NC)"
+
+cnn_train_hpi: ## Nuevo flujo: ConvNeXt-Tiny solo para HPI
+	@$(MAKE) cnn_train CNN_MODEL=convnext_tiny CNN_TARGET=hpi CNN_PRETRAINED=1 CNN_RUN_DIR=cnn/runs/real_convnext_tiny_hpi_e$(CNN_EPOCHS)
+
+cnn_train_ivr: ## Nuevo flujo: ConvNeXt-Tiny solo para IVR
+	@$(MAKE) cnn_train CNN_MODEL=convnext_tiny CNN_TARGET=ivr CNN_PRETRAINED=1 CNN_RUN_DIR=cnn/runs/real_convnext_tiny_ivr_e$(CNN_EPOCHS)
+
+cnn_train_both: ## Nuevo flujo: ConvNeXt-Tiny para [HPI, IVR]
+	@$(MAKE) cnn_train CNN_MODEL=convnext_tiny CNN_TARGET=both CNN_PRETRAINED=1 CNN_RUN_DIR=cnn/runs/real_convnext_tiny_both_e$(CNN_EPOCHS)

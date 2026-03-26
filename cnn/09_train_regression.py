@@ -9,7 +9,7 @@ import json
 import random
 from dataclasses import asdict, dataclass
 from pathlib import Path
-from typing import Iterable
+from typing import Iterable, Optional
 
 import torch
 from PIL import Image
@@ -32,6 +32,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--val-csv", default="cnn/splits/val.csv")
     parser.add_argument("--out-dir", default="cnn/runs/baseline")
     parser.add_argument("--model", choices=["resnet18", "efficientnet_b0", "convnext_tiny"], default="resnet18")
+    parser.add_argument("--target", choices=["both", "hpi", "ivr"], default="both")
     parser.add_argument("--pretrained", action="store_true")
     parser.add_argument("--img-size", type=int, default=224)
     parser.add_argument("--epochs", type=int, default=20)
@@ -66,8 +67,9 @@ def resolve_device(device_arg: str) -> torch.device:
 
 
 class KelpRegressionDataset(Dataset):
-    def __init__(self, csv_path: str, transform: transforms.Compose, max_samples: int = 0):
+    def __init__(self, csv_path: str, transform: transforms.Compose, target: str, max_samples: int = 0):
         self.transform = transform
+        self.target = target
         self.samples: list[tuple[str, float, float]] = []
         with open(csv_path, newline="", encoding="utf-8") as f:
             reader = csv.DictReader(f)
@@ -84,25 +86,30 @@ class KelpRegressionDataset(Dataset):
         image_path, hpi, ivr = self.samples[idx]
         image = Image.open(image_path).convert("RGB")
         x = self.transform(image)
-        y = torch.tensor([hpi, ivr], dtype=torch.float32)
+        if self.target == "both":
+            y = torch.tensor([hpi, ivr], dtype=torch.float32)
+        elif self.target == "hpi":
+            y = torch.tensor([hpi], dtype=torch.float32)
+        else:
+            y = torch.tensor([ivr], dtype=torch.float32)
         return x, y
 
 
-def build_model(name: str, pretrained: bool) -> nn.Module:
+def build_model(name: str, pretrained: bool, output_dim: int) -> nn.Module:
     if name == "resnet18":
         weights = ResNet18_Weights.DEFAULT if pretrained else None
         model = resnet18(weights=weights)
-        model.fc = nn.Linear(model.fc.in_features, 2)
+        model.fc = nn.Linear(model.fc.in_features, output_dim)
         return model
     if name == "efficientnet_b0":
         weights = EfficientNet_B0_Weights.DEFAULT if pretrained else None
         model = efficientnet_b0(weights=weights)
-        model.classifier[1] = nn.Linear(model.classifier[1].in_features, 2)
+        model.classifier[1] = nn.Linear(model.classifier[1].in_features, output_dim)
         return model
     if name == "convnext_tiny":
         weights = ConvNeXt_Tiny_Weights.DEFAULT if pretrained else None
         model = convnext_tiny(weights=weights)
-        model.classifier[2] = nn.Linear(model.classifier[2].in_features, 2)
+        model.classifier[2] = nn.Linear(model.classifier[2].in_features, output_dim)
         return model
     raise ValueError(f"Modelo no soportado: {name}")
 
@@ -122,8 +129,8 @@ class EpochMetrics:
     epoch: int
     train_loss: float
     val_loss: float
-    mae_hpi: float
-    mae_ivr: float
+    mae_hpi: Optional[float]
+    mae_ivr: Optional[float]
     mae_mean: float
 
 
@@ -165,11 +172,13 @@ def run_epoch_val(
     loader: DataLoader,
     criterion: nn.Module,
     device: torch.device,
-) -> tuple[float, float, float, float]:
+    target: str,
+) -> tuple[float, Optional[float], Optional[float], float]:
     model.eval()
     total_loss = 0.0
-    total_abs_hpi = 0.0
-    total_abs_ivr = 0.0
+    total_abs_col0 = 0.0
+    total_abs_col1 = 0.0
+    out_dim = None
     n = 0
 
     with torch.no_grad():
@@ -177,19 +186,32 @@ def run_epoch_val(
             x = x.to(device, non_blocking=True)
             y = y.to(device, non_blocking=True)
             pred = model(x)
+            if out_dim is None:
+                out_dim = pred.shape[1]
             loss = criterion(pred, y)
 
             abs_err = (pred - y).abs()
             bs = y.size(0)
             total_loss += float(loss.item()) * bs
-            total_abs_hpi += float(abs_err[:, 0].sum().item())
-            total_abs_ivr += float(abs_err[:, 1].sum().item())
+            total_abs_col0 += float(abs_err[:, 0].sum().item())
+            if abs_err.shape[1] > 1:
+                total_abs_col1 += float(abs_err[:, 1].sum().item())
             n += bs
 
     val_loss = total_loss / max(n, 1)
-    mae_hpi = total_abs_hpi / max(n, 1)
-    mae_ivr = total_abs_ivr / max(n, 1)
-    mae_mean = (mae_hpi + mae_ivr) / 2.0
+    if out_dim == 2:
+        mae_hpi = total_abs_col0 / max(n, 1)
+        mae_ivr = total_abs_col1 / max(n, 1)
+        mae_mean = (mae_hpi + mae_ivr) / 2.0
+    else:
+        if target == "hpi":
+            mae_hpi = total_abs_col0 / max(n, 1)
+            mae_ivr = None
+            mae_mean = mae_hpi
+        else:
+            mae_hpi = None
+            mae_ivr = total_abs_col0 / max(n, 1)
+            mae_mean = mae_ivr
     return val_loss, mae_hpi, mae_ivr, mae_mean
 
 
@@ -202,10 +224,15 @@ def save_metrics_csv(path: Path, metrics: Iterable[EpochMetrics]) -> None:
         )
         writer.writeheader()
         for m in metrics:
-            writer.writerow(asdict(m))
+            row = asdict(m)
+            if row["mae_hpi"] is None:
+                row["mae_hpi"] = ""
+            if row["mae_ivr"] is None:
+                row["mae_ivr"] = ""
+            writer.writerow(row)
 
 
-def save_training_plot(metrics: list[EpochMetrics], output: Path) -> bool:
+def save_training_plot(metrics: list[EpochMetrics], output: Path, target: str) -> bool:
     try:
         import matplotlib
 
@@ -221,8 +248,8 @@ def save_training_plot(metrics: list[EpochMetrics], output: Path) -> bool:
     epochs = [m.epoch for m in metrics]
     train_loss = [m.train_loss for m in metrics]
     val_loss = [m.val_loss for m in metrics]
-    mae_hpi = [m.mae_hpi for m in metrics]
-    mae_ivr = [m.mae_ivr for m in metrics]
+    mae_hpi = [m.mae_hpi for m in metrics if m.mae_hpi is not None]
+    mae_ivr = [m.mae_ivr for m in metrics if m.mae_ivr is not None]
     mae_mean = [m.mae_mean for m in metrics]
 
     fig, axes = plt.subplots(1, 2, figsize=(12, 4))
@@ -235,8 +262,12 @@ def save_training_plot(metrics: list[EpochMetrics], output: Path) -> bool:
     axes[0].grid(True, alpha=0.3)
     axes[0].legend()
 
-    axes[1].plot(epochs, mae_hpi, marker="o", label="mae_hpi")
-    axes[1].plot(epochs, mae_ivr, marker="o", label="mae_ivr")
+    if target in {"both", "hpi"} and len(mae_hpi) == len(epochs):
+        axes[1].plot(epochs, mae_hpi, marker="o", label="mae_hpi")
+    if target == "both" and len(mae_ivr) == len(epochs):
+        axes[1].plot(epochs, mae_ivr, marker="o", label="mae_ivr")
+    if target == "ivr" and len(mae_ivr) == len(epochs):
+        axes[1].plot(epochs, mae_ivr, marker="o", label="mae_ivr")
     axes[1].plot(epochs, mae_mean, marker="o", label="mae_mean")
     axes[1].set_title("MAE")
     axes[1].set_xlabel("Epoch")
@@ -251,6 +282,14 @@ def save_training_plot(metrics: list[EpochMetrics], output: Path) -> bool:
 
 
 def load_metrics_csv(path: Path) -> list[EpochMetrics]:
+    def parse_optional_float(v: str) -> Optional[float]:
+        if v is None:
+            return None
+        s = str(v).strip()
+        if s == "":
+            return None
+        return float(s)
+
     metrics: list[EpochMetrics] = []
     with path.open(newline="", encoding="utf-8") as f:
         reader = csv.DictReader(f)
@@ -260,8 +299,8 @@ def load_metrics_csv(path: Path) -> list[EpochMetrics]:
                     epoch=int(float(row["epoch"])),
                     train_loss=float(row["train_loss"]),
                     val_loss=float(row["val_loss"]),
-                    mae_hpi=float(row["mae_hpi"]),
-                    mae_ivr=float(row["mae_ivr"]),
+                    mae_hpi=parse_optional_float(row["mae_hpi"]),
+                    mae_ivr=parse_optional_float(row["mae_ivr"]),
                     mae_mean=float(row["mae_mean"]),
                 )
             )
@@ -274,7 +313,7 @@ def main() -> None:
         metrics_path = Path(args.plot_metrics_csv)
         plot_path = Path(args.plot_output) if args.plot_output else metrics_path.parent / "training_curves.png"
         metrics = load_metrics_csv(metrics_path)
-        if save_training_plot(metrics, plot_path):
+        if save_training_plot(metrics, plot_path, target=args.target):
             print(f"Gráfica de entrenamiento guardada en: {plot_path}")
         return
 
@@ -302,8 +341,8 @@ def main() -> None:
         ]
     )
 
-    train_ds = KelpRegressionDataset(args.train_csv, train_tfms, max_samples=args.max_train_samples)
-    val_ds = KelpRegressionDataset(args.val_csv, val_tfms, max_samples=args.max_val_samples)
+    train_ds = KelpRegressionDataset(args.train_csv, train_tfms, target=args.target, max_samples=args.max_train_samples)
+    val_ds = KelpRegressionDataset(args.val_csv, val_tfms, target=args.target, max_samples=args.max_val_samples)
 
     train_loader = DataLoader(
         train_ds,
@@ -320,7 +359,8 @@ def main() -> None:
         pin_memory=device.type == "cuda",
     )
 
-    model = build_model(args.model, args.pretrained).to(device)
+    output_dim = 2 if args.target == "both" else 1
+    model = build_model(args.model, args.pretrained, output_dim=output_dim).to(device)
     criterion = build_loss(args.loss, args.huber_delta)
     optimizer = torch.optim.AdamW(model.parameters(), lr=args.lr, weight_decay=args.weight_decay)
     scaler = torch.amp.GradScaler(enabled=amp_enabled)
@@ -338,7 +378,7 @@ def main() -> None:
 
     for epoch in range(1, args.epochs + 1):
         train_loss = run_epoch_train(model, train_loader, criterion, optimizer, device, scaler, amp_enabled)
-        val_loss, mae_hpi, mae_ivr, mae_mean = run_epoch_val(model, val_loader, criterion, device)
+        val_loss, mae_hpi, mae_ivr, mae_mean = run_epoch_val(model, val_loader, criterion, device, args.target)
 
         metrics = EpochMetrics(
             epoch=epoch,
@@ -356,13 +396,24 @@ def main() -> None:
             best_mae = mae_mean
             torch.save({"epoch": epoch, "model_state_dict": model.state_dict()}, out_dir / "best.pt")
 
-        print(
-            f"[{epoch:03d}/{args.epochs}] train_loss={train_loss:.4f} val_loss={val_loss:.4f} "
-            f"mae_hpi={mae_hpi:.4f} mae_ivr={mae_ivr:.4f} mae_mean={mae_mean:.4f}"
-        )
+        if args.target == "both":
+            print(
+                f"[{epoch:03d}/{args.epochs}] train_loss={train_loss:.4f} val_loss={val_loss:.4f} "
+                f"mae_hpi={mae_hpi:.4f} mae_ivr={mae_ivr:.4f} mae_mean={mae_mean:.4f}"
+            )
+        elif args.target == "hpi":
+            print(
+                f"[{epoch:03d}/{args.epochs}] train_loss={train_loss:.4f} val_loss={val_loss:.4f} "
+                f"mae_hpi={mae_hpi:.4f}"
+            )
+        else:
+            print(
+                f"[{epoch:03d}/{args.epochs}] train_loss={train_loss:.4f} val_loss={val_loss:.4f} "
+                f"mae_ivr={mae_ivr:.4f}"
+            )
 
     plot_path = out_dir / "training_curves.png"
-    if save_training_plot(history, plot_path):
+    if save_training_plot(history, plot_path, target=args.target):
         print(f"Gráfica de entrenamiento guardada en: {plot_path}")
 
     print(f"Entrenamiento finalizado. Mejor mae_mean={best_mae:.4f}. Salida: {out_dir}")
