@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Evaluacion de una CNN de regresion sobre split de test."""
+"""Evaluacion de una CNN ordinal sobre split de test."""
 
 from __future__ import annotations
 
@@ -61,11 +61,21 @@ def resolve_run_dir(run_dir: Path) -> Path:
     )
 
 
+def parse_int_label(raw: str, field: str) -> int:
+    value = float(raw)
+    rounded = int(round(value))
+    if abs(value - rounded) > 1e-6:
+        raise ValueError(f"{field} debe ser entero, recibido: {raw}")
+    if rounded < 0:
+        raise ValueError(f"{field} no puede ser negativo, recibido: {raw}")
+    return rounded
+
+
 class TestDataset(Dataset):
     def __init__(self, csv_path: str, transform: transforms.Compose, target: str):
         self.transform = transform
         self.target = target
-        self.rows: list[tuple[str, str, float, float]] = []
+        self.rows: list[tuple[str, str, int, int]] = []
         with open(csv_path, newline="", encoding="utf-8") as f:
             reader = csv.DictReader(f)
             for row in reader:
@@ -73,8 +83,8 @@ class TestDataset(Dataset):
                     (
                         row["photo_cod"],
                         row["image_path"],
-                        float(row["hpi"]),
-                        float(row["ivr"]),
+                        parse_int_label(row["hpi"], "hpi"),
+                        parse_int_label(row["ivr"], "ivr"),
                     )
                 )
 
@@ -86,16 +96,23 @@ class TestDataset(Dataset):
         image = Image.open(image_path).convert("RGB")
         x = self.transform(image)
         if self.target == "both":
-            y = torch.tensor([hpi, ivr], dtype=torch.float32)
+            y = torch.tensor([hpi, ivr], dtype=torch.int64)
         elif self.target == "hpi":
-            y = torch.tensor([hpi], dtype=torch.float32)
+            y = torch.tensor([hpi], dtype=torch.int64)
         else:
-            y = torch.tensor([ivr], dtype=torch.float32)
+            y = torch.tensor([ivr], dtype=torch.int64)
         return x, y, photo_cod, image_path
 
 
-def build_model(name: str, target: str) -> nn.Module:
-    output_dim = 2 if target == "both" else 1
+def output_dim_for_target(target: str, num_classes_hpi: int, num_classes_ivr: int) -> int:
+    if target == "both":
+        return (num_classes_hpi - 1) + (num_classes_ivr - 1)
+    if target == "hpi":
+        return num_classes_hpi - 1
+    return num_classes_ivr - 1
+
+
+def build_model(name: str, output_dim: int) -> nn.Module:
     if name == "resnet18":
         model = resnet18(weights=None)
         model.fc = nn.Linear(model.fc.in_features, output_dim)
@@ -109,6 +126,27 @@ def build_model(name: str, target: str) -> nn.Module:
         model.classifier[2] = nn.Linear(model.classifier[2].in_features, output_dim)
         return model
     raise ValueError(f"Modelo no soportado: {name}")
+
+
+def decode_ordinal_logits(logits: torch.Tensor) -> torch.Tensor:
+    probs = torch.sigmoid(logits)
+    return (probs > 0.5).sum(dim=1)
+
+
+def decode_predictions(
+    logits: torch.Tensor,
+    target: str,
+    num_classes_hpi: int,
+    num_classes_ivr: int,
+) -> torch.Tensor:
+    if target == "both":
+        hpi_dim = num_classes_hpi - 1
+        pred_hpi = decode_ordinal_logits(logits[:, :hpi_dim])
+        pred_ivr = decode_ordinal_logits(logits[:, hpi_dim:])
+        return torch.stack([pred_hpi, pred_ivr], dim=1).to(torch.int64)
+
+    pred = decode_ordinal_logits(logits)
+    return pred.unsqueeze(1).to(torch.int64)
 
 
 def save_predictions_csv(
@@ -141,25 +179,25 @@ def save_predictions_csv(
         writer = csv.DictWriter(f, fieldnames=fieldnames)
         writer.writeheader()
         for i, code in enumerate(photo_codes):
-            row: dict[str, float | str] = {
+            row: dict[str, int | str] = {
                 "photo_cod": code,
                 "image_path": image_paths[i],
             }
             if target in {"both", "hpi"}:
-                true_hpi = float(y_true[i, 0].item())
-                pred_hpi = float(y_pred[i, 0].item())
+                true_hpi = int(y_true[i, 0].item())
+                pred_hpi = int(y_pred[i, 0].item())
                 row["true_hpi"] = true_hpi
                 row["pred_hpi"] = pred_hpi
                 row["abs_err_hpi"] = abs(pred_hpi - true_hpi)
             if target == "both":
-                true_ivr = float(y_true[i, 1].item())
-                pred_ivr = float(y_pred[i, 1].item())
+                true_ivr = int(y_true[i, 1].item())
+                pred_ivr = int(y_pred[i, 1].item())
                 row["true_ivr"] = true_ivr
                 row["pred_ivr"] = pred_ivr
                 row["abs_err_ivr"] = abs(pred_ivr - true_ivr)
             if target == "ivr":
-                true_ivr = float(y_true[i, 0].item())
-                pred_ivr = float(y_pred[i, 0].item())
+                true_ivr = int(y_true[i, 0].item())
+                pred_ivr = int(y_pred[i, 0].item())
                 row["true_ivr"] = true_ivr
                 row["pred_ivr"] = pred_ivr
                 row["abs_err_ivr"] = abs(pred_ivr - true_ivr)
@@ -219,7 +257,13 @@ def plot_confusion_matrix(
     fig.savefig(out_path, dpi=150)
 
 
-def save_plots(out_dir: Path, y_true: torch.Tensor, y_pred: torch.Tensor, target: str) -> tuple[list[str], dict[str, Any]]:
+def save_plots(
+    out_dir: Path,
+    y_true: torch.Tensor,
+    y_pred: torch.Tensor,
+    target: str,
+    class_limits: dict[str, tuple[int, int]],
+) -> tuple[list[str], dict[str, Any]]:
     try:
         import matplotlib
 
@@ -231,14 +275,11 @@ def save_plots(out_dir: Path, y_true: torch.Tensor, y_pred: torch.Tensor, target
     outputs: list[str] = []
     info: dict[str, Any] = {}
 
-    # Limpieza de plots legacy para no mezclar formatos antiguos y nuevos.
     for legacy_name in ("5_real_vs_pred.png", "5_residuals_hist.png"):
         legacy_path = out_dir / legacy_name
         if legacy_path.exists():
             legacy_path.unlink()
 
-    # Matriz de confusion sobre etiquetas enteras:
-    # pred se redondea y se recorta al rango [min_label, max_label] observado en true.
     target_slices: list[tuple[str, int]]
     if target == "both":
         target_slices = [("hpi", 0), ("ivr", 1)]
@@ -248,10 +289,9 @@ def save_plots(out_dir: Path, y_true: torch.Tensor, y_pred: torch.Tensor, target
         target_slices = [("ivr", 0)]
 
     for target_name, idx in target_slices:
-        true_vals = y_true[:, idx].round().to(torch.int64)
-        min_label = int(true_vals.min().item())
-        max_label = int(true_vals.max().item())
-        pred_vals = y_pred[:, idx].round().to(torch.int64).clamp(min=min_label, max=max_label)
+        true_vals = y_true[:, idx].to(torch.int64)
+        min_label, max_label = class_limits[target_name]
+        pred_vals = y_pred[:, idx].to(torch.int64).clamp(min=min_label, max=max_label)
 
         labels = list(range(min_label, max_label + 1))
         cm = confusion_matrix_counts(true_vals, pred_vals, min_label, max_label)
@@ -267,7 +307,7 @@ def save_plots(out_dir: Path, y_true: torch.Tensor, y_pred: torch.Tensor, target
             "labels": labels,
             "min_label": min_label,
             "max_label": max_label,
-            "pred_postprocess": "rounded_to_int_and_clipped_to_true_label_range",
+            "pred_postprocess": "clipped_to_config_label_range",
             "matrix": cm.tolist(),
         }
 
@@ -288,12 +328,25 @@ def main() -> None:
     target_name = str(config.get("target", "both")) if args.target == "auto" else args.target
     if target_name not in {"both", "hpi", "ivr"}:
         raise ValueError(f"Target no soportado: {target_name}")
+
+    head_type = str(config.get("head_type", ""))
+    if head_type != "ordinal_coral":
+        raise RuntimeError(
+            "Esta version de 10_test_cnn.py espera checkpoints ordinales (head_type=ordinal_coral)."
+        )
+
+    num_classes_hpi = int(config.get("num_classes_hpi", 0))
+    num_classes_ivr = int(config.get("num_classes_ivr", 0))
+    if num_classes_hpi < 2 or num_classes_ivr < 2:
+        raise ValueError("num_classes_hpi/num_classes_ivr invalidos en config.json")
+
     img_size = args.img_size if args.img_size > 0 else int(config.get("img_size", 224))
     checkpoint_path = run_dir / args.checkpoint
     if not checkpoint_path.exists():
         raise FileNotFoundError(f"No existe checkpoint: {checkpoint_path}")
 
     device = resolve_device(args.device)
+    output_dim = output_dim_for_target(target_name, num_classes_hpi, num_classes_ivr)
 
     test_tfms = transforms.Compose(
         [
@@ -311,7 +364,7 @@ def main() -> None:
         pin_memory=device.type == "cuda",
     )
 
-    model = build_model(model_name, target=target_name).to(device)
+    model = build_model(model_name, output_dim=output_dim).to(device)
     ckpt = torch.load(checkpoint_path, map_location=device)
     state_dict = ckpt["model_state_dict"] if isinstance(ckpt, dict) and "model_state_dict" in ckpt else ckpt
     model.load_state_dict(state_dict)
@@ -325,18 +378,20 @@ def main() -> None:
     with torch.no_grad():
         for x, y, batch_codes, batch_paths in test_loader:
             x = x.to(device, non_blocking=True)
-            pred = model(x).cpu()
+            logits = model(x).cpu()
+            pred = decode_predictions(logits, target_name, num_classes_hpi, num_classes_ivr)
             y_true_parts.append(y)
             y_pred_parts.append(pred)
             photo_codes.extend(batch_codes)
             image_paths.extend(batch_paths)
 
-    y_true = torch.cat(y_true_parts, dim=0)
-    y_pred = torch.cat(y_pred_parts, dim=0)
-    abs_err = (y_pred - y_true).abs()
-    sq_err = (y_pred - y_true).pow(2)
+    y_true = torch.cat(y_true_parts, dim=0).to(torch.int64)
+    y_pred = torch.cat(y_pred_parts, dim=0).to(torch.int64)
 
-    # 1) MAE y 2) RMSE
+    abs_err_disc = (y_pred - y_true).abs()
+    abs_err = abs_err_disc.to(torch.float32)
+    sq_err = abs_err.pow(2)
+
     if target_name == "both":
         mae_hpi = float(abs_err[:, 0].mean().item())
         mae_ivr = float(abs_err[:, 1].mean().item())
@@ -362,32 +417,35 @@ def main() -> None:
         rmse_ivr = float(torch.sqrt(sq_err[:, 0].mean()).item())
         rmse_mean = rmse_ivr
 
-    # 4) Accuracy por tolerancia
-    def tol_metrics(tol: float) -> dict[str, float]:
+    def discrete_acc(max_diff: int) -> dict[str, float]:
         if target_name == "both":
-            ok_hpi = (abs_err[:, 0] <= tol).float().mean().item()
-            ok_ivr = (abs_err[:, 1] <= tol).float().mean().item()
-            ok_both = ((abs_err[:, 0] <= tol) & (abs_err[:, 1] <= tol)).float().mean().item()
-            ok_mean = (abs_err <= tol).float().mean().item()
+            ok_hpi = (abs_err_disc[:, 0] <= max_diff).float().mean().item()
+            ok_ivr = (abs_err_disc[:, 1] <= max_diff).float().mean().item()
+            ok_both = ((abs_err_disc[:, 0] <= max_diff) & (abs_err_disc[:, 1] <= max_diff)).float().mean().item()
+            ok_mean = (abs_err_disc <= max_diff).float().mean().item()
             return {
-                "tol": tol,
+                "max_diff": max_diff,
                 "acc_hpi": float(ok_hpi),
                 "acc_ivr": float(ok_ivr),
                 "acc_both": float(ok_both),
                 "acc_mean": float(ok_mean),
             }
-        ok_target = (abs_err[:, 0] <= tol).float().mean().item()
+        ok_target = (abs_err_disc[:, 0] <= max_diff).float().mean().item()
         return {
-            "tol": tol,
+            "max_diff": max_diff,
             f"acc_{target_name}": float(ok_target),
             "acc_mean": float(ok_target),
         }
 
-    tol_05 = tol_metrics(0.5)
-    tol_10 = tol_metrics(1.0)
+    acc_exact = discrete_acc(0)
+    acc_within_1 = discrete_acc(1)
+    acc_within_2 = discrete_acc(2)
 
-    # 5) Plots (matrices de confusion)
-    plot_files, confusion_info = save_plots(output_dir, y_true, y_pred, target=target_name)
+    class_limits = {
+        "hpi": (0, num_classes_hpi - 1),
+        "ivr": (0, num_classes_ivr - 1),
+    }
+    plot_files, confusion_info = save_plots(output_dir, y_true, y_pred, target=target_name, class_limits=class_limits)
 
     predictions_path = output_dir / "predictions_test.csv"
     save_predictions_csv(predictions_path, photo_codes, image_paths, y_true, y_pred, target=target_name)
@@ -397,6 +455,9 @@ def main() -> None:
         "checkpoint": str(checkpoint_path),
         "model": model_name,
         "target": target_name,
+        "head_type": head_type,
+        "num_classes_hpi": num_classes_hpi,
+        "num_classes_ivr": num_classes_ivr,
         "n_test_samples": len(test_ds),
         "1_mae": {
             "mae_hpi": mae_hpi,
@@ -408,9 +469,10 @@ def main() -> None:
             "rmse_ivr": rmse_ivr,
             "rmse_mean": rmse_mean,
         },
-        "4_tolerance_accuracy": {
-            "tol_0_5": tol_05,
-            "tol_1_0": tol_10,
+        "3_discrete_accuracy": {
+            "exact_match": acc_exact,
+            "within_1": acc_within_1,
+            "within_2": acc_within_2,
         },
         "5_plots": {
             "generated": len(plot_files) > 0,
@@ -432,25 +494,28 @@ def main() -> None:
         print(f"1) MAE: mae_hpi={mae_hpi:.4f} mae_ivr={mae_ivr:.4f} mae_mean={mae_mean:.4f}")
         print(f"2) RMSE: rmse_hpi={rmse_hpi:.4f} rmse_ivr={rmse_ivr:.4f} rmse_mean={rmse_mean:.4f}")
         print(
-            "4) Acc tolerancia: "
-            f"tol=0.5 acc_hpi={tol_05['acc_hpi']:.4f} acc_ivr={tol_05['acc_ivr']:.4f} acc_both={tol_05['acc_both']:.4f}; "
-            f"tol=1.0 acc_hpi={tol_10['acc_hpi']:.4f} acc_ivr={tol_10['acc_ivr']:.4f} acc_both={tol_10['acc_both']:.4f}"
+            "3) Acc discreta: "
+            f"exact acc_hpi={acc_exact['acc_hpi']:.4f} acc_ivr={acc_exact['acc_ivr']:.4f} acc_both={acc_exact['acc_both']:.4f}; "
+            f"within1 acc_hpi={acc_within_1['acc_hpi']:.4f} acc_ivr={acc_within_1['acc_ivr']:.4f} acc_both={acc_within_1['acc_both']:.4f}; "
+            f"within2 acc_hpi={acc_within_2['acc_hpi']:.4f} acc_ivr={acc_within_2['acc_ivr']:.4f} acc_both={acc_within_2['acc_both']:.4f}"
         )
     elif target_name == "hpi":
         print(f"1) MAE: mae_hpi={mae_hpi:.4f} mae_mean={mae_mean:.4f}")
         print(f"2) RMSE: rmse_hpi={rmse_hpi:.4f} rmse_mean={rmse_mean:.4f}")
         print(
-            "4) Acc tolerancia: "
-            f"tol=0.5 acc_hpi={tol_05['acc_hpi']:.4f}; "
-            f"tol=1.0 acc_hpi={tol_10['acc_hpi']:.4f}"
+            "3) Acc discreta: "
+            f"exact acc_hpi={acc_exact['acc_hpi']:.4f}; "
+            f"within1 acc_hpi={acc_within_1['acc_hpi']:.4f}; "
+            f"within2 acc_hpi={acc_within_2['acc_hpi']:.4f}"
         )
     else:
         print(f"1) MAE: mae_ivr={mae_ivr:.4f} mae_mean={mae_mean:.4f}")
         print(f"2) RMSE: rmse_ivr={rmse_ivr:.4f} rmse_mean={rmse_mean:.4f}")
         print(
-            "4) Acc tolerancia: "
-            f"tol=0.5 acc_ivr={tol_05['acc_ivr']:.4f}; "
-            f"tol=1.0 acc_ivr={tol_10['acc_ivr']:.4f}"
+            "3) Acc discreta: "
+            f"exact acc_ivr={acc_exact['acc_ivr']:.4f}; "
+            f"within1 acc_ivr={acc_within_1['acc_ivr']:.4f}; "
+            f"within2 acc_ivr={acc_within_2['acc_ivr']:.4f}"
         )
     if plot_files:
         print(f"5) Plots (confusion matrix): {', '.join(plot_files)}")

@@ -127,3 +127,22 @@ Ajuste del flujo de reentrenamiento:
 1. Se mantiene `ConvNeXt-Tiny` y se separa el entrenamiento en 3 runs: `hpi`, `ivr` y `both`.
 2. Se confirma uso de `CNN_AMP=1` (mixed precision en CUDA) para reducir VRAM y acelerar.
 3. Siguiente paso: lanzar los 3 entrenamientos y luego `cnn_test` por cada run para comparar en test.
+entrenamos utilizando la 9.1
+
+con la
+2026-03-26
+Se cambia el problema de regresión (siempre usa float) a clasificación ordinal (CORAL-CNN) de 0-N. Osea tantas clases como notas dan los expertos (al ser 7 en principio).
+Se procederá a los mismos experimentos, hpi, ivr y both.
+Justificación del cambio:
+1. Las etiquetas reales son enteras y ordenadas, no continuas: HPI tiene clases `0..6` (7) e IVR `0..7` (8).
+2. La regresión obliga a predecir float y luego redondear, mientras que el modelo ordinal aprende directamente fronteras entre niveles de mordida.
+3. La formulación ordinal penaliza de forma natural más un error lejano (ej. 1->5) que uno cercano (1->2), que encaja mejor con la interpretación biológica de la escala.
+4. Se mantiene `09.1` como baseline histórico de regresión para poder comparar objetivamente ambos enfoques con el mismo split de test.
+EN CASO HPI SON 7 clases 0...6
+EN CASO IVR SON 8 clases 0...7
+EN CASO BOTH SON 56 clases. Pero no se tratan como 56 salidas, sino que se trata como VARIABLES DISTINTAS, pero comparten el mismo backbone, entonces el gradiente actualiza la CNN teniendo en cuenta los pesos compartidos de HPI e IVR, lo que prueba ser un poco mejor.
+
+
+Al acabar el entrenamiento, ahora tenemos 6 runs
+1.2.3 son las real_*, Donde se buscó comparar qué modelo era mejor, pero el problema era regresión. 
+4.5.6 clas_ordinal_* Donde buscamos cual es el mejor tipo de clasificación para el problema, 2 cnns (1 HPI otra IVR) o una CNN [HPI,IVR]. Siendo todas estas de clasificación ordinal

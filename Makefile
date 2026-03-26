@@ -10,7 +10,7 @@ SCRIPT_TRAIN = scripts/05_entrenar_yolo.py
 SCRIPT_APPLY = scripts/06_aplicar_yolo.py
 SCRIPT_NORM = scripts/07_normalizar_recortes.py
 SCRIPT_CNN_PREPARE = cnn/08_build_split_manifest.py
-SCRIPT_CNN_TRAIN = cnn/09_train_regression.py
+SCRIPT_CNN_TRAIN = cnn/09_train_ordinal.py
 SCRIPT_CNN_TEST = cnn/10_test_cnn.py
 OUTPUT_DIR = out
 N ?= 10
@@ -54,7 +54,7 @@ CNN_EPOCHS ?= 20
 CNN_BATCH ?= 8
 CNN_LR ?= 1e-4
 CNN_WD ?= 1e-4
-CNN_LOSS ?= mae
+CNN_LOSS ?= ordinal_bce
 CNN_HUBER_DELTA ?= 1.0
 CNN_IMG ?= 224
 CNN_WORKERS ?= 4
@@ -62,7 +62,7 @@ CNN_DEVICE ?= auto
 CNN_AMP ?= 0
 CNN_MAX_TRAIN ?= 0
 CNN_MAX_VAL ?= 0
-CNN_TEST_RUN_DIR ?= cnn/runs/real_effb0_e30
+CNN_TEST_RUN_DIR ?= cnn/runs/clas_ordinal_hpi_convnext_tiny_e30
 CNN_TEST_CSV ?= cnn/splits/test.csv
 CNN_TEST_CKPT ?= best.pt
 CNN_TEST_MODEL ?=
@@ -162,14 +162,14 @@ cnn_prepare: ## Genera manifest.csv y train/val/test para CNN en un único paso
 	$(PYTHON) $(SCRIPT_CNN_PREPARE) --labels-csv $(CNN_LABELS) --images-dir $(CNN_IMAGES) --pattern "$(CNN_PATTERN)" --manifest-output $(CNN_MANIFEST) --split-output-dir $(CNN_SPLIT_DIR) --train-ratio $(CNN_TRAIN_RATIO) --val-ratio $(CNN_VAL_RATIO) --test-ratio $(CNN_TEST_RATIO) --seed $(CNN_SEED)
 	@echo "$(GREEN)CNN preparada: $(CNN_MANIFEST) y $(CNN_SPLIT_DIR)/{train,val,test}.csv$(NC)"
 
-cnn_train: ## Entrena la CNN de regresión (HPI, IVR)
+cnn_train: ## Entrena la CNN ordinal (HPI, IVR)
 	@echo "$(BLUE)Entrenando CNN $(CNN_MODEL) target=$(CNN_TARGET) en $(CNN_DEVICE) (epochs=$(CNN_EPOCHS), batch=$(CNN_BATCH))...$(NC)"
 	$(PYTHON) $(SCRIPT_CNN_TRAIN) --train-csv $(CNN_TRAIN_CSV) --val-csv $(CNN_VAL_CSV) --out-dir $(CNN_RUN_DIR) --model $(CNN_MODEL) --target $(CNN_TARGET) --img-size $(CNN_IMG) --epochs $(CNN_EPOCHS) --batch-size $(CNN_BATCH) --lr $(CNN_LR) --weight-decay $(CNN_WD) --loss $(CNN_LOSS) --huber-delta $(CNN_HUBER_DELTA) --workers $(CNN_WORKERS) --seed $(CNN_SEED) --device $(CNN_DEVICE) --max-train-samples $(CNN_MAX_TRAIN) --max-val-samples $(CNN_MAX_VAL) $(if $(filter 1 true TRUE yes YES,$(CNN_PRETRAINED)),--pretrained,) $(if $(filter 1 true TRUE yes YES,$(CNN_AMP)),--amp,)
 	@echo "$(GREEN)Entrenamiento CNN finalizado. Salida: $(CNN_RUN_DIR)$(NC)"
 
 cnn_smoke: ## Smoke test CNN rápido (1 época, pocas muestras, CPU)
 	@echo "$(BLUE)Smoke test CNN (rápido)$(NC)"
-	$(PYTHON) $(SCRIPT_CNN_TRAIN) --train-csv $(CNN_TRAIN_CSV) --val-csv $(CNN_VAL_CSV) --out-dir cnn/runs/smoke --model resnet18 --target both --img-size 224 --epochs 1 --batch-size 4 --lr 1e-4 --weight-decay 1e-4 --loss mae --workers 0 --seed $(CNN_SEED) --device cpu --max-train-samples 64 --max-val-samples 32
+	$(PYTHON) $(SCRIPT_CNN_TRAIN) --train-csv $(CNN_TRAIN_CSV) --val-csv $(CNN_VAL_CSV) --out-dir cnn/runs/smoke --model resnet18 --target both --img-size 224 --epochs 1 --batch-size 4 --lr 1e-4 --weight-decay 1e-4 --loss ordinal_bce --workers 0 --seed $(CNN_SEED) --device cpu --max-train-samples 64 --max-val-samples 32
 	@echo "$(GREEN)Smoke test completado (cnn/runs/smoke)$(NC)"
 
 cnn_test: ## Evalúa una run CNN en el split de test
