@@ -166,6 +166,27 @@ def ordinal_levels(labels: torch.Tensor, num_classes: int) -> torch.Tensor:
     return (labels.unsqueeze(1) > thresholds.unsqueeze(0)).to(torch.float32)
 
 
+def ordinal_importance_weights(labels: torch.Tensor, num_classes: int) -> torch.Tensor:
+    """Pesos por umbral inspirados en el paper de rank-consistent ordinal regression."""
+    if labels.numel() == 0:
+        raise ValueError("No se pueden calcular pesos ordinales sin etiquetas.")
+
+    labels = labels.to(torch.int64)
+    num_thresholds = num_classes - 1
+    weights = torch.empty(num_thresholds, dtype=torch.float32)
+    total = float(labels.numel())
+
+    for threshold in range(num_thresholds):
+        above = (labels > threshold).sum().to(torch.float32)
+        below = total - above
+        weights[threshold] = torch.sqrt(torch.maximum(above, below))
+
+    max_weight = torch.max(weights)
+    if max_weight <= 0:
+        return torch.ones_like(weights)
+    return weights / max_weight
+
+
 def decode_ordinal_logits(logits: torch.Tensor) -> torch.Tensor:
     probs = torch.sigmoid(logits)
     return (probs > 0.5).sum(dim=1)
@@ -179,6 +200,8 @@ class OrdinalBCELoss(nn.Module):
         num_classes_ivr: int,
         both_weight_hpi: float = 0.5,
         both_weight_ivr: float = 0.5,
+        hpi_threshold_weights: Optional[torch.Tensor] = None,
+        ivr_threshold_weights: Optional[torch.Tensor] = None,
     ):
         super().__init__()
         self.target = target
@@ -188,6 +211,19 @@ class OrdinalBCELoss(nn.Module):
         self.ivr_dim = num_classes_ivr - 1
         self.both_weight_hpi = both_weight_hpi
         self.both_weight_ivr = both_weight_ivr
+        self.register_buffer("hpi_threshold_weights", hpi_threshold_weights)
+        self.register_buffer("ivr_threshold_weights", ivr_threshold_weights)
+
+    def _weighted_bce_with_logits(
+        self,
+        logits: torch.Tensor,
+        levels: torch.Tensor,
+        threshold_weights: Optional[torch.Tensor],
+    ) -> torch.Tensor:
+        loss = F.binary_cross_entropy_with_logits(logits, levels, reduction="none")
+        if threshold_weights is not None:
+            loss = loss * threshold_weights.unsqueeze(0)
+        return loss.mean()
 
     def forward(self, logits: torch.Tensor, labels: torch.Tensor) -> torch.Tensor:
         if self.target == "both":
@@ -197,16 +233,16 @@ class OrdinalBCELoss(nn.Module):
             hpi_levels = ordinal_levels(labels[:, 0], self.num_classes_hpi)
             ivr_levels = ordinal_levels(labels[:, 1], self.num_classes_ivr)
 
-            loss_hpi = F.binary_cross_entropy_with_logits(hpi_logits, hpi_levels)
-            loss_ivr = F.binary_cross_entropy_with_logits(ivr_logits, ivr_levels)
+            loss_hpi = self._weighted_bce_with_logits(hpi_logits, hpi_levels, self.hpi_threshold_weights)
+            loss_ivr = self._weighted_bce_with_logits(ivr_logits, ivr_levels, self.ivr_threshold_weights)
             return (self.both_weight_hpi * loss_hpi) + (self.both_weight_ivr * loss_ivr)
 
         if self.target == "hpi":
             levels = ordinal_levels(labels[:, 0], self.num_classes_hpi)
-            return F.binary_cross_entropy_with_logits(logits, levels)
+            return self._weighted_bce_with_logits(logits, levels, self.hpi_threshold_weights)
 
         levels = ordinal_levels(labels[:, 0], self.num_classes_ivr)
-        return F.binary_cross_entropy_with_logits(logits, levels)
+        return self._weighted_bce_with_logits(logits, levels, self.ivr_threshold_weights)
 
 
 @dataclass
@@ -474,6 +510,19 @@ def main() -> None:
 
     num_classes_hpi, num_classes_ivr = infer_num_classes(train_ds, val_ds)
     output_dim = output_dim_for_target(args.target, num_classes_hpi, num_classes_ivr)
+    use_threshold_weights = True
+    train_labels_hpi = torch.tensor([sample[1] for sample in train_ds.samples], dtype=torch.int64)
+    train_labels_ivr = torch.tensor([sample[2] for sample in train_ds.samples], dtype=torch.int64)
+    hpi_threshold_weights = (
+        ordinal_importance_weights(train_labels_hpi, num_classes_hpi).to(device)
+        if use_threshold_weights
+        else None
+    )
+    ivr_threshold_weights = (
+        ordinal_importance_weights(train_labels_ivr, num_classes_ivr).to(device)
+        if use_threshold_weights
+        else None
+    )
     if args.target == "both":
         raw_hpi = float(args.both_loss_weight_hpi)
         raw_ivr = float(args.both_loss_weight_ivr)
@@ -510,6 +559,8 @@ def main() -> None:
         num_classes_ivr=num_classes_ivr,
         both_weight_hpi=both_weight_hpi,
         both_weight_ivr=both_weight_ivr,
+        hpi_threshold_weights=hpi_threshold_weights,
+        ivr_threshold_weights=ivr_threshold_weights,
     )
     optimizer = torch.optim.AdamW(model.parameters(), lr=args.lr, weight_decay=args.weight_decay)
     scaler = torch.amp.GradScaler(enabled=amp_enabled)
@@ -523,6 +574,9 @@ def main() -> None:
             "output_dim": output_dim,
             "both_loss_weight_hpi_effective": both_weight_hpi,
             "both_loss_weight_ivr_effective": both_weight_ivr,
+            "ordinal_threshold_weights_enabled": use_threshold_weights,
+            "hpi_threshold_weights": hpi_threshold_weights.tolist() if hpi_threshold_weights is not None else None,
+            "ivr_threshold_weights": ivr_threshold_weights.tolist() if ivr_threshold_weights is not None else None,
         }
     )
     with (out_dir / "config.json").open("w", encoding="utf-8") as f:
@@ -541,6 +595,8 @@ def main() -> None:
         print(
             f"Pesos de loss both: hpi={both_weight_hpi:.3f} ivr={both_weight_ivr:.3f}"
         )
+    if use_threshold_weights:
+        print("Aplicando pesos ordinales por umbral inspirados en el paper rank-consistent.")
 
     for epoch in range(1, args.epochs + 1):
         train_loss = run_epoch_train(model, train_loader, criterion, optimizer, device, scaler, amp_enabled)

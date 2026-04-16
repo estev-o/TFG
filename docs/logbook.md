@@ -166,5 +166,13 @@ El resultado, comparado con el ponderado anterior (0.4/0.6) y con el run sin wei
 - `mae_ivr=1.8324`, también mejora frente a ambos runs anteriores.
 - En exact match baja un poco respecto al run sin weight, pero mejora en acierto dentro de ±1 y ±2.
 - En conjunto, esta configuración 0.3/0.7 es la mejor de las tres en error medio, aunque el RMSE sube ligeramente frente al ponderado anterior.
-2026-04-16
-Se realizó un cambio en el entrenamiento
+2026-04-16 (parte 2)
+Se realizó un cambio en la loss ordinal inspirado en el paper "Rank consistent ordinal regression for neural networks with application to age estimation". La adición principal fue:
+1. Implementación de pesos ordinales por umbral (`ordinal_importance_weights` en 09_train_ordinal.py) que pondera la loss BCE de forma individual para cada threshold (frontera entre clases ordinales), no solo entre targets (HPI/IVR).
+2. La fórmula calcula el desbalance entre clases para cada umbral y aplica sqrt-normalization, siguiendo la formulación del paper.
+3. Los pesos se guardan en config.json para reproducibilidad.
+4. La ponderación es complementaria a los pesos de task-level (0.3/0.7) y no cambia la arquitectura.
+
+Próximo paso: entrenar la versión con pesos ordinales por umbral y comparar directamente contra la mejor run actual (0.3/0.7, `mae_mean=1.1948`). Si la mejora es marginal (<1%), pasaremos directamente a probar ConvNeXt-Small. Si hay mejora significativa (>1%), exploraremos un CORAL aún más estricto con cabeza de softmax per-threshold.
+
+
