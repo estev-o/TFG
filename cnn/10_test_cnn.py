@@ -15,6 +15,7 @@ from torch import nn
 from torch.utils.data import DataLoader, Dataset
 from torchvision import transforms
 from torchvision.models import (
+    convnext_small,
     convnext_tiny,
     efficientnet_b0,
     resnet18,
@@ -26,7 +27,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--run-dir", required=True, help="Directorio de run (el que contiene config.json)")
     parser.add_argument("--test-csv", default="cnn/splits/test.csv")
     parser.add_argument("--checkpoint", default="best.pt", help="Nombre de checkpoint dentro de run-dir")
-    parser.add_argument("--model", default="", choices=["", "resnet18", "efficientnet_b0", "convnext_tiny"])
+    parser.add_argument("--model", default="", choices=["", "resnet18", "efficientnet_b0", "convnext_small", "convnext_tiny"])
     parser.add_argument("--target", default="auto", choices=["auto", "both", "hpi", "ivr"])
     parser.add_argument("--img-size", type=int, default=0, help="0 para usar el de config.json")
     parser.add_argument("--batch-size", type=int, default=16)
@@ -123,6 +124,10 @@ def build_model(name: str, output_dim: int) -> nn.Module:
         return model
     if name == "convnext_tiny":
         model = convnext_tiny(weights=None)
+        model.classifier[2] = nn.Linear(model.classifier[2].in_features, output_dim)
+        return model
+    if name == "convnext_small":
+        model = convnext_small(weights=None)
         model.classifier[2] = nn.Linear(model.classifier[2].in_features, output_dim)
         return model
     raise ValueError(f"Modelo no soportado: {name}")

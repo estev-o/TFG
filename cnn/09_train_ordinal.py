@@ -18,9 +18,11 @@ from torch import nn
 from torch.utils.data import DataLoader, Dataset
 from torchvision import transforms
 from torchvision.models import (
+    ConvNeXt_Small_Weights,
     ConvNeXt_Tiny_Weights,
     EfficientNet_B0_Weights,
     ResNet18_Weights,
+    convnext_small,
     convnext_tiny,
     efficientnet_b0,
     resnet18,
@@ -36,7 +38,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--out-dir", default="cnn/runs/baseline")
     parser.add_argument(
         "--model",
-        choices=["resnet18", "efficientnet_b0", "convnext_tiny"],
+        choices=["resnet18", "efficientnet_b0", "convnext_small", "convnext_tiny"],
         default="resnet18",
     )
     parser.add_argument("--target", choices=["both", "hpi", "ivr"], default="both")
@@ -176,6 +178,11 @@ def build_model(name: str, pretrained: bool, output_dim: int) -> nn.Module:
     if name == "convnext_tiny":
         weights = ConvNeXt_Tiny_Weights.DEFAULT if pretrained else None
         model = convnext_tiny(weights=weights)
+        model.classifier[2] = nn.Linear(model.classifier[2].in_features, output_dim)
+        return model
+    if name == "convnext_small":
+        weights = ConvNeXt_Small_Weights.DEFAULT if pretrained else None
+        model = convnext_small(weights=weights)
         model.classifier[2] = nn.Linear(model.classifier[2].in_features, output_dim)
         return model
     raise ValueError(f"Modelo no soportado: {name}")

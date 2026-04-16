@@ -171,10 +171,10 @@ cnn_train: ## Entrena la CNN ordinal (HPI, IVR)
 	$(PYTHON) $(SCRIPT_CNN_TRAIN) --train-csv $(CNN_TRAIN_CSV) --val-csv $(CNN_VAL_CSV) --out-dir $(CNN_RUN_DIR) --model $(CNN_MODEL) --target $(CNN_TARGET) --img-size $(CNN_IMG) --epochs $(CNN_EPOCHS) --batch-size $(CNN_BATCH) --lr $(CNN_LR) --weight-decay $(CNN_WD) --loss $(CNN_LOSS) --both-loss-weight-hpi $(CNN_BOTH_W_HPI) --both-loss-weight-ivr $(CNN_BOTH_W_IVR) --huber-delta $(CNN_HUBER_DELTA) --workers $(CNN_WORKERS) --seed $(CNN_SEED) --device $(CNN_DEVICE) --max-train-samples $(CNN_MAX_TRAIN) --max-val-samples $(CNN_MAX_VAL) --early-stopping-patience $(CNN_ES_PATIENCE) --early-stopping-min-delta $(CNN_ES_MIN_DELTA) $(if $(filter 1 true TRUE yes YES,$(CNN_PRETRAINED)),--pretrained,) $(if $(filter 1 true TRUE yes YES,$(CNN_AMP)),--amp,)
 	@echo "$(GREEN)Entrenamiento CNN finalizado. Salida: $(CNN_RUN_DIR)$(NC)"
 
-cnn_smoke: ## Smoke test CNN rápido (1 época, pocas muestras, CPU)
+cnn_smoke: ## Smoke test CNN rápido con ConvNeXt-Small (1 época, pocas muestras, CPU)
 	@echo "$(BLUE)Smoke test CNN (rápido)$(NC)"
-	$(PYTHON) $(SCRIPT_CNN_TRAIN) --train-csv $(CNN_TRAIN_CSV) --val-csv $(CNN_VAL_CSV) --out-dir cnn/runs/smoke --model resnet18 --target both --img-size 224 --epochs 1 --batch-size 4 --lr 1e-4 --weight-decay 1e-4 --loss ordinal_bce --both-loss-weight-hpi $(CNN_BOTH_W_HPI) --both-loss-weight-ivr $(CNN_BOTH_W_IVR) --workers 0 --seed $(CNN_SEED) --device cpu --max-train-samples 64 --max-val-samples 32 --early-stopping-patience 0 --early-stopping-min-delta 0.0
-	@echo "$(GREEN)Smoke test completado (cnn/runs/smoke)$(NC)"
+	$(PYTHON) $(SCRIPT_CNN_TRAIN) --train-csv $(CNN_TRAIN_CSV) --val-csv $(CNN_VAL_CSV) --out-dir cnn/runs/smoke_convnext_small --model convnext_small --target both --img-size 224 --epochs 1 --batch-size 2 --lr 1e-4 --weight-decay 1e-4 --loss ordinal_bce --both-loss-weight-hpi $(CNN_BOTH_W_HPI) --both-loss-weight-ivr $(CNN_BOTH_W_IVR) --workers 0 --seed $(CNN_SEED) --device cpu --max-train-samples 16 --max-val-samples 8 --early-stopping-patience 0 --early-stopping-min-delta 0.0
+	@echo "$(GREEN)Smoke test completado (cnn/runs/smoke_convnext_small)$(NC)"
 
 cnn_test: ## Evalúa una run CNN en el split de test
 	@echo "$(BLUE)Evaluando run CNN en test: $(CNN_TEST_RUN_DIR)$(NC)"
