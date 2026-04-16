@@ -131,7 +131,9 @@ entrenamos utilizando la 9.1
 
 con la
 2026-03-26
-Se cambia el problema de regresión (siempre usa float) a clasificación ordinal (CORAL-CNN) de 0-N. Osea tantas clases como notas dan los expertos (al ser 7 en principio).
+Se cambia el problema de regresión (siempre usa float) a clasificación ordinal (CORAL-CNN) (https://www.sciencedirect.com/science/article/pii/S016786552030413X?via%3Dihub) 
+de 0-N. Osea tantas clases como notas dan los expertos (al ser 7 en principio).
+
 Se procederá a los mismos experimentos, hpi, ivr y both.
 Justificación del cambio:
 1. Las etiquetas reales son enteras y ordenadas, no continuas: HPI tiene clases `0..6` (7) e IVR `0..7` (8).
@@ -146,3 +148,23 @@ EN CASO BOTH SON 56 clases. Pero no se tratan como 56 salidas, sino que se trata
 Al acabar el entrenamiento, ahora tenemos 6 runs
 1.2.3 son las real_*, Donde se buscó comparar qué modelo era mejor, pero el problema era regresión. 
 4.5.6 clas_ordinal_* Donde buscamos cual es el mejor tipo de clasificación para el problema, 2 cnns (1 HPI otra IVR) o una CNN [HPI,IVR]. Siendo todas estas de clasificación ordinal
+2026-03-27
+Comparativa breve en test (baseline regresión vs ordinal):
+1. Baseline `real_convnext_tiny_e30`: `mae_hpi=0.6418`, `mae_ivr=1.9651`, `mae_mean=1.3034`.
+2. Ordinal `hpi`: `mae_hpi=0.5745` (mejora clara en HPI frente al baseline).
+3. Ordinal `ivr`: `mae_ivr=1.9656` (prácticamente igual al baseline en IVR).
+4. Ordinal `both`: `mae_hpi=0.5630`, `mae_ivr=1.8653`, `mae_mean=1.2142` (mejor resultado global).
+Conclusión: para esta fase, la opción recomendada es `clas_ordinal_both_convnext_tiny_e30`.
+2026-03-27
+Ajuste de entrenamiento en `both`: se añade ponderación explícita de pérdidas para priorizar IVR (`w_hpi=0.4`, `w_ivr=0.6`, normalizado), además añadimos early stopping. El resultado no es muco más distinto, hay menos error grande en IVR (RMSE), pero no es un cambio muy relevante
+2026-04-16
+Se hace una prueba de nuevo con ES y unos pesos de HPI 0.3 e IVR 0.7.
+Se entrenó con este comando:
+'make cnn_train CNN_MODEL=convnext_tiny CNN_PRETRAINED=1 CNN_TARGET=both CNN_BOTH_W_HPI=0.3 CNN_BOTH_W_IVR=0.7 CNN_ES_PATIENCE=8 CNN_RUN_DIR=cnn/runs/weighted_0703_convnext_tiny_es'
+El resultado, comparado con el ponderado anterior (0.4/0.6) y con el run sin weight, fue:
+- `mae_mean=1.1948`, mejor que el run sin weight (`1.2142`) y que el ponderado anterior (`1.2120`).
+- `mae_ivr=1.8324`, también mejora frente a ambos runs anteriores.
+- En exact match baja un poco respecto al run sin weight, pero mejora en acierto dentro de ±1 y ±2.
+- En conjunto, esta configuración 0.3/0.7 es la mejor de las tres en error medio, aunque el RMSE sube ligeramente frente al ponderado anterior.
+2026-04-16
+Se realizó un cambio en el entrenamiento

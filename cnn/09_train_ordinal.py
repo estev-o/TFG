@@ -41,6 +41,18 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--lr", type=float, default=1e-4)
     parser.add_argument("--weight-decay", type=float, default=1e-4)
     parser.add_argument("--loss", choices=["ordinal_bce", "mae", "huber", "mse"], default="ordinal_bce")
+    parser.add_argument(
+        "--both-loss-weight-hpi",
+        type=float,
+        default=0.4,
+        help="Peso de la loss de HPI cuando target=both (se normaliza con IVR).",
+    )
+    parser.add_argument(
+        "--both-loss-weight-ivr",
+        type=float,
+        default=0.6,
+        help="Peso de la loss de IVR cuando target=both (se normaliza con HPI).",
+    )
     parser.add_argument("--huber-delta", type=float, default=1.0)
     parser.add_argument("--workers", type=int, default=4)
     parser.add_argument("--seed", type=int, default=42)
@@ -48,6 +60,18 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--amp", action="store_true")
     parser.add_argument("--max-train-samples", type=int, default=0)
     parser.add_argument("--max-val-samples", type=int, default=0)
+    parser.add_argument(
+        "--early-stopping-patience",
+        type=int,
+        default=0,
+        help="Numero de epocas sin mejora para parar (0 = desactivado).",
+    )
+    parser.add_argument(
+        "--early-stopping-min-delta",
+        type=float,
+        default=0.0,
+        help="Mejora minima de mae_mean para resetear paciencia.",
+    )
     parser.add_argument("--plot-metrics-csv", default="", help="Solo genera grafica desde un metrics.csv y termina")
     parser.add_argument("--plot-output", default="", help="Salida PNG para --plot-metrics-csv")
     return parser.parse_args()
@@ -148,13 +172,22 @@ def decode_ordinal_logits(logits: torch.Tensor) -> torch.Tensor:
 
 
 class OrdinalBCELoss(nn.Module):
-    def __init__(self, target: str, num_classes_hpi: int, num_classes_ivr: int):
+    def __init__(
+        self,
+        target: str,
+        num_classes_hpi: int,
+        num_classes_ivr: int,
+        both_weight_hpi: float = 0.5,
+        both_weight_ivr: float = 0.5,
+    ):
         super().__init__()
         self.target = target
         self.num_classes_hpi = num_classes_hpi
         self.num_classes_ivr = num_classes_ivr
         self.hpi_dim = num_classes_hpi - 1
         self.ivr_dim = num_classes_ivr - 1
+        self.both_weight_hpi = both_weight_hpi
+        self.both_weight_ivr = both_weight_ivr
 
     def forward(self, logits: torch.Tensor, labels: torch.Tensor) -> torch.Tensor:
         if self.target == "both":
@@ -166,7 +199,7 @@ class OrdinalBCELoss(nn.Module):
 
             loss_hpi = F.binary_cross_entropy_with_logits(hpi_logits, hpi_levels)
             loss_ivr = F.binary_cross_entropy_with_logits(ivr_logits, ivr_levels)
-            return 0.5 * (loss_hpi + loss_ivr)
+            return (self.both_weight_hpi * loss_hpi) + (self.both_weight_ivr * loss_ivr)
 
         if self.target == "hpi":
             levels = ordinal_levels(labels[:, 0], self.num_classes_hpi)
@@ -441,6 +474,19 @@ def main() -> None:
 
     num_classes_hpi, num_classes_ivr = infer_num_classes(train_ds, val_ds)
     output_dim = output_dim_for_target(args.target, num_classes_hpi, num_classes_ivr)
+    if args.target == "both":
+        raw_hpi = float(args.both_loss_weight_hpi)
+        raw_ivr = float(args.both_loss_weight_ivr)
+        if raw_hpi < 0 or raw_ivr < 0:
+            raise ValueError("Los pesos de loss para both deben ser >= 0.")
+        denom = raw_hpi + raw_ivr
+        if denom <= 0:
+            raise ValueError("La suma de pesos de loss para both debe ser > 0.")
+        both_weight_hpi = raw_hpi / denom
+        both_weight_ivr = raw_ivr / denom
+    else:
+        both_weight_hpi = 1.0
+        both_weight_ivr = 0.0
 
     train_loader = DataLoader(
         train_ds,
@@ -458,7 +504,13 @@ def main() -> None:
     )
 
     model = build_model(args.model, args.pretrained, output_dim=output_dim).to(device)
-    criterion = OrdinalBCELoss(args.target, num_classes_hpi=num_classes_hpi, num_classes_ivr=num_classes_ivr)
+    criterion = OrdinalBCELoss(
+        args.target,
+        num_classes_hpi=num_classes_hpi,
+        num_classes_ivr=num_classes_ivr,
+        both_weight_hpi=both_weight_hpi,
+        both_weight_ivr=both_weight_ivr,
+    )
     optimizer = torch.optim.AdamW(model.parameters(), lr=args.lr, weight_decay=args.weight_decay)
     scaler = torch.amp.GradScaler(enabled=amp_enabled)
 
@@ -469,6 +521,8 @@ def main() -> None:
             "num_classes_hpi": num_classes_hpi,
             "num_classes_ivr": num_classes_ivr,
             "output_dim": output_dim,
+            "both_loss_weight_hpi_effective": both_weight_hpi,
+            "both_loss_weight_ivr_effective": both_weight_ivr,
         }
     )
     with (out_dir / "config.json").open("w", encoding="utf-8") as f:
@@ -476,12 +530,17 @@ def main() -> None:
 
     history: list[EpochMetrics] = []
     best_mae = float("inf")
+    epochs_without_improvement = 0
 
     print(
         f"Entrenando model={args.model} target={args.target} device={device} "
         f"train={len(train_ds)} val={len(val_ds)} epochs={args.epochs} batch={args.batch_size} "
         f"classes_hpi={num_classes_hpi} classes_ivr={num_classes_ivr}"
     )
+    if args.target == "both":
+        print(
+            f"Pesos de loss both: hpi={both_weight_hpi:.3f} ivr={both_weight_ivr:.3f}"
+        )
 
     for epoch in range(1, args.epochs + 1):
         train_loss = run_epoch_train(model, train_loader, criterion, optimizer, device, scaler, amp_enabled)
@@ -516,9 +575,13 @@ def main() -> None:
             "output_dim": output_dim,
         }
         torch.save(ckpt_payload, out_dir / "last.pt")
-        if mae_mean < best_mae:
+        improvement = best_mae - mae_mean
+        if improvement > args.early_stopping_min_delta:
             best_mae = mae_mean
+            epochs_without_improvement = 0
             torch.save(ckpt_payload, out_dir / "best.pt")
+        else:
+            epochs_without_improvement += 1
 
         if args.target == "both":
             print(
@@ -535,6 +598,14 @@ def main() -> None:
                 f"[{epoch:03d}/{args.epochs}] train_loss={train_loss:.4f} val_loss={val_loss:.4f} "
                 f"mae_ivr={mae_ivr:.4f}"
             )
+
+        if args.early_stopping_patience > 0 and epochs_without_improvement >= args.early_stopping_patience:
+            print(
+                "Early stopping activado: "
+                f"sin mejora > {args.early_stopping_min_delta:.6f} en "
+                f"{epochs_without_improvement} epocas consecutivas."
+            )
+            break
 
     plot_path = out_dir / "training_curves.png"
     if save_training_plot(history, plot_path, target=args.target):
