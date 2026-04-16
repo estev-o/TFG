@@ -28,11 +28,17 @@ from torchvision.models import (
 
 
 def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Train CNN ordinal classifier for HPI/IVR")
+    parser = argparse.ArgumentParser(
+        description="Train CNN ordinal classifier for HPI/IVR"
+    )
     parser.add_argument("--train-csv", default="cnn/splits/train.csv")
     parser.add_argument("--val-csv", default="cnn/splits/val.csv")
     parser.add_argument("--out-dir", default="cnn/runs/baseline")
-    parser.add_argument("--model", choices=["resnet18", "efficientnet_b0", "convnext_tiny"], default="resnet18")
+    parser.add_argument(
+        "--model",
+        choices=["resnet18", "efficientnet_b0", "convnext_tiny"],
+        default="resnet18",
+    )
     parser.add_argument("--target", choices=["both", "hpi", "ivr"], default="both")
     parser.add_argument("--pretrained", action="store_true")
     parser.add_argument("--img-size", type=int, default=224)
@@ -40,7 +46,9 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--batch-size", type=int, default=8)
     parser.add_argument("--lr", type=float, default=1e-4)
     parser.add_argument("--weight-decay", type=float, default=1e-4)
-    parser.add_argument("--loss", choices=["ordinal_bce", "mae", "huber", "mse"], default="ordinal_bce")
+    parser.add_argument(
+        "--loss", choices=["ordinal_bce", "mae", "huber", "mse"], default="ordinal_bce"
+    )
     parser.add_argument(
         "--both-loss-weight-hpi",
         type=float,
@@ -72,8 +80,14 @@ def parse_args() -> argparse.Namespace:
         default=0.0,
         help="Mejora minima de mae_mean para resetear paciencia.",
     )
-    parser.add_argument("--plot-metrics-csv", default="", help="Solo genera grafica desde un metrics.csv y termina")
-    parser.add_argument("--plot-output", default="", help="Salida PNG para --plot-metrics-csv")
+    parser.add_argument(
+        "--plot-metrics-csv",
+        default="",
+        help="Solo genera grafica desde un metrics.csv y termina",
+    )
+    parser.add_argument(
+        "--plot-output", default="", help="Salida PNG para --plot-metrics-csv"
+    )
     return parser.parse_args()
 
 
@@ -102,7 +116,13 @@ def parse_int_label(raw: str, field: str) -> int:
 
 
 class KelpOrdinalDataset(Dataset):
-    def __init__(self, csv_path: str, transform: transforms.Compose, target: str, max_samples: int = 0):
+    def __init__(
+        self,
+        csv_path: str,
+        transform: transforms.Compose,
+        target: str,
+        max_samples: int = 0,
+    ):
         self.transform = transform
         self.target = target
         self.samples: list[tuple[str, int, int]] = []
@@ -166,27 +186,6 @@ def ordinal_levels(labels: torch.Tensor, num_classes: int) -> torch.Tensor:
     return (labels.unsqueeze(1) > thresholds.unsqueeze(0)).to(torch.float32)
 
 
-def ordinal_importance_weights(labels: torch.Tensor, num_classes: int) -> torch.Tensor:
-    """Pesos por umbral inspirados en el paper de rank-consistent ordinal regression."""
-    if labels.numel() == 0:
-        raise ValueError("No se pueden calcular pesos ordinales sin etiquetas.")
-
-    labels = labels.to(torch.int64)
-    num_thresholds = num_classes - 1
-    weights = torch.empty(num_thresholds, dtype=torch.float32)
-    total = float(labels.numel())
-
-    for threshold in range(num_thresholds):
-        above = (labels > threshold).sum().to(torch.float32)
-        below = total - above
-        weights[threshold] = torch.sqrt(torch.maximum(above, below))
-
-    max_weight = torch.max(weights)
-    if max_weight <= 0:
-        return torch.ones_like(weights)
-    return weights / max_weight
-
-
 def decode_ordinal_logits(logits: torch.Tensor) -> torch.Tensor:
     probs = torch.sigmoid(logits)
     return (probs > 0.5).sum(dim=1)
@@ -200,8 +199,6 @@ class OrdinalBCELoss(nn.Module):
         num_classes_ivr: int,
         both_weight_hpi: float = 0.5,
         both_weight_ivr: float = 0.5,
-        hpi_threshold_weights: Optional[torch.Tensor] = None,
-        ivr_threshold_weights: Optional[torch.Tensor] = None,
     ):
         super().__init__()
         self.target = target
@@ -211,19 +208,6 @@ class OrdinalBCELoss(nn.Module):
         self.ivr_dim = num_classes_ivr - 1
         self.both_weight_hpi = both_weight_hpi
         self.both_weight_ivr = both_weight_ivr
-        self.register_buffer("hpi_threshold_weights", hpi_threshold_weights)
-        self.register_buffer("ivr_threshold_weights", ivr_threshold_weights)
-
-    def _weighted_bce_with_logits(
-        self,
-        logits: torch.Tensor,
-        levels: torch.Tensor,
-        threshold_weights: Optional[torch.Tensor],
-    ) -> torch.Tensor:
-        loss = F.binary_cross_entropy_with_logits(logits, levels, reduction="none")
-        if threshold_weights is not None:
-            loss = loss * threshold_weights.unsqueeze(0)
-        return loss.mean()
 
     def forward(self, logits: torch.Tensor, labels: torch.Tensor) -> torch.Tensor:
         if self.target == "both":
@@ -233,16 +217,16 @@ class OrdinalBCELoss(nn.Module):
             hpi_levels = ordinal_levels(labels[:, 0], self.num_classes_hpi)
             ivr_levels = ordinal_levels(labels[:, 1], self.num_classes_ivr)
 
-            loss_hpi = self._weighted_bce_with_logits(hpi_logits, hpi_levels, self.hpi_threshold_weights)
-            loss_ivr = self._weighted_bce_with_logits(ivr_logits, ivr_levels, self.ivr_threshold_weights)
+            loss_hpi = F.binary_cross_entropy_with_logits(hpi_logits, hpi_levels)
+            loss_ivr = F.binary_cross_entropy_with_logits(ivr_logits, ivr_levels)
             return (self.both_weight_hpi * loss_hpi) + (self.both_weight_ivr * loss_ivr)
 
         if self.target == "hpi":
             levels = ordinal_levels(labels[:, 0], self.num_classes_hpi)
-            return self._weighted_bce_with_logits(logits, levels, self.hpi_threshold_weights)
+            return F.binary_cross_entropy_with_logits(logits, levels)
 
         levels = ordinal_levels(labels[:, 0], self.num_classes_ivr)
-        return self._weighted_bce_with_logits(logits, levels, self.ivr_threshold_weights)
+        return F.binary_cross_entropy_with_logits(logits, levels)
 
 
 @dataclass
@@ -289,7 +273,9 @@ def run_epoch_train(
         y = y.to(device, non_blocking=True)
         optimizer.zero_grad(set_to_none=True)
 
-        with torch.autocast(device_type=device.type, dtype=torch.float16, enabled=amp_enabled):
+        with torch.autocast(
+            device_type=device.type, dtype=torch.float16, enabled=amp_enabled
+        ):
             logits = model(x)
             loss = criterion(logits, y)
 
@@ -363,7 +349,14 @@ def save_metrics_csv(path: Path, metrics: Iterable[EpochMetrics]) -> None:
     with path.open("w", newline="", encoding="utf-8") as f:
         writer = csv.DictWriter(
             f,
-            fieldnames=["epoch", "train_loss", "val_loss", "mae_hpi", "mae_ivr", "mae_mean"],
+            fieldnames=[
+                "epoch",
+                "train_loss",
+                "val_loss",
+                "mae_hpi",
+                "mae_ivr",
+                "mae_mean",
+            ],
         )
         writer.writeheader()
         for m in metrics:
@@ -450,7 +443,9 @@ def load_metrics_csv(path: Path) -> list[EpochMetrics]:
     return metrics
 
 
-def infer_num_classes(train_ds: KelpOrdinalDataset, val_ds: KelpOrdinalDataset) -> tuple[int, int]:
+def infer_num_classes(
+    train_ds: KelpOrdinalDataset, val_ds: KelpOrdinalDataset
+) -> tuple[int, int]:
     num_classes_hpi = max(train_ds.max_hpi, val_ds.max_hpi) + 1
     num_classes_ivr = max(train_ds.max_ivr, val_ds.max_ivr) + 1
     if num_classes_hpi < 2:
@@ -460,7 +455,9 @@ def infer_num_classes(train_ds: KelpOrdinalDataset, val_ds: KelpOrdinalDataset) 
     return num_classes_hpi, num_classes_ivr
 
 
-def output_dim_for_target(target: str, num_classes_hpi: int, num_classes_ivr: int) -> int:
+def output_dim_for_target(
+    target: str, num_classes_hpi: int, num_classes_ivr: int
+) -> int:
     if target == "both":
         return (num_classes_hpi - 1) + (num_classes_ivr - 1)
     if target == "hpi":
@@ -472,7 +469,11 @@ def main() -> None:
     args = parse_args()
     if args.plot_metrics_csv:
         metrics_path = Path(args.plot_metrics_csv)
-        plot_path = Path(args.plot_output) if args.plot_output else metrics_path.parent / "training_curves.png"
+        plot_path = (
+            Path(args.plot_output)
+            if args.plot_output
+            else metrics_path.parent / "training_curves.png"
+        )
         metrics = load_metrics_csv(metrics_path)
         if save_training_plot(metrics, plot_path, target=args.target):
             print(f"Grafica de entrenamiento guardada en: {plot_path}")
@@ -486,7 +487,9 @@ def main() -> None:
     amp_enabled = args.amp and device.type == "cuda"
 
     if args.loss != "ordinal_bce":
-        print(f"Aviso: --loss={args.loss} se ignora. Esta version usa clasificacion ordinal (ordinal_bce).")
+        print(
+            f"Aviso: --loss={args.loss} se ignora. Esta version usa clasificacion ordinal (ordinal_bce)."
+        )
 
     train_tfms = transforms.Compose(
         [
@@ -505,24 +508,18 @@ def main() -> None:
         ]
     )
 
-    train_ds = KelpOrdinalDataset(args.train_csv, train_tfms, target=args.target, max_samples=args.max_train_samples)
-    val_ds = KelpOrdinalDataset(args.val_csv, val_tfms, target=args.target, max_samples=args.max_val_samples)
+    train_ds = KelpOrdinalDataset(
+        args.train_csv,
+        train_tfms,
+        target=args.target,
+        max_samples=args.max_train_samples,
+    )
+    val_ds = KelpOrdinalDataset(
+        args.val_csv, val_tfms, target=args.target, max_samples=args.max_val_samples
+    )
 
     num_classes_hpi, num_classes_ivr = infer_num_classes(train_ds, val_ds)
     output_dim = output_dim_for_target(args.target, num_classes_hpi, num_classes_ivr)
-    use_threshold_weights = True
-    train_labels_hpi = torch.tensor([sample[1] for sample in train_ds.samples], dtype=torch.int64)
-    train_labels_ivr = torch.tensor([sample[2] for sample in train_ds.samples], dtype=torch.int64)
-    hpi_threshold_weights = (
-        ordinal_importance_weights(train_labels_hpi, num_classes_hpi).to(device)
-        if use_threshold_weights
-        else None
-    )
-    ivr_threshold_weights = (
-        ordinal_importance_weights(train_labels_ivr, num_classes_ivr).to(device)
-        if use_threshold_weights
-        else None
-    )
     if args.target == "both":
         raw_hpi = float(args.both_loss_weight_hpi)
         raw_ivr = float(args.both_loss_weight_ivr)
@@ -559,10 +556,10 @@ def main() -> None:
         num_classes_ivr=num_classes_ivr,
         both_weight_hpi=both_weight_hpi,
         both_weight_ivr=both_weight_ivr,
-        hpi_threshold_weights=hpi_threshold_weights,
-        ivr_threshold_weights=ivr_threshold_weights,
     )
-    optimizer = torch.optim.AdamW(model.parameters(), lr=args.lr, weight_decay=args.weight_decay)
+    optimizer = torch.optim.AdamW(
+        model.parameters(), lr=args.lr, weight_decay=args.weight_decay
+    )
     scaler = torch.amp.GradScaler(enabled=amp_enabled)
 
     config_data = vars(args).copy()
@@ -574,9 +571,6 @@ def main() -> None:
             "output_dim": output_dim,
             "both_loss_weight_hpi_effective": both_weight_hpi,
             "both_loss_weight_ivr_effective": both_weight_ivr,
-            "ordinal_threshold_weights_enabled": use_threshold_weights,
-            "hpi_threshold_weights": hpi_threshold_weights.tolist() if hpi_threshold_weights is not None else None,
-            "ivr_threshold_weights": ivr_threshold_weights.tolist() if ivr_threshold_weights is not None else None,
         }
     )
     with (out_dir / "config.json").open("w", encoding="utf-8") as f:
@@ -595,11 +589,11 @@ def main() -> None:
         print(
             f"Pesos de loss both: hpi={both_weight_hpi:.3f} ivr={both_weight_ivr:.3f}"
         )
-    if use_threshold_weights:
-        print("Aplicando pesos ordinales por umbral inspirados en el paper rank-consistent.")
 
     for epoch in range(1, args.epochs + 1):
-        train_loss = run_epoch_train(model, train_loader, criterion, optimizer, device, scaler, amp_enabled)
+        train_loss = run_epoch_train(
+            model, train_loader, criterion, optimizer, device, scaler, amp_enabled
+        )
         val_loss, mae_hpi, mae_ivr, mae_mean = run_epoch_val(
             model,
             val_loader,
@@ -655,7 +649,10 @@ def main() -> None:
                 f"mae_ivr={mae_ivr:.4f}"
             )
 
-        if args.early_stopping_patience > 0 and epochs_without_improvement >= args.early_stopping_patience:
+        if (
+            args.early_stopping_patience > 0
+            and epochs_without_improvement >= args.early_stopping_patience
+        ):
             print(
                 "Early stopping activado: "
                 f"sin mejora > {args.early_stopping_min_delta:.6f} en "

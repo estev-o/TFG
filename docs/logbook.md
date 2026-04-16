@@ -175,4 +175,10 @@ Se realizó un cambio en la loss ordinal inspirado en el paper "Rank consistent 
 
 Próximo paso: entrenar la versión con pesos ordinales por umbral y comparar directamente contra la mejor run actual (0.3/0.7, `mae_mean=1.1948`). Si la mejora es marginal (<1%), pasaremos directamente a probar ConvNeXt-Small. Si hay mejora significativa (>1%), exploraremos un CORAL aún más estricto con cabeza de softmax per-threshold.
 
+2026-04-16 (parte 3)
+Se guardó la ejecución en '3_1_CORAL_1_cnvnxt_es', la comparación de sus resultados son:
+- `mae_mean=1.2242`, peor que la mejor run actual (`1.1948`, 0.3/0.7) y también peor que la ponderada anterior (`1.2120`).
+- `mae_ivr=1.8582`, también queda por detrás de ambas referencias.
+- En exact match y acierto dentro de ±1/±2 no mejora de forma consistente frente a 0.3/0.7.
+- Conclusión: la ponderación por umbral inspirada en el paper no aporta mejora en este caso frente a la 0.3/0.7, así que la run que sigue siendo mejor overall es la 0.3/0.7. El siguiente paso razonable es probar ConvNeXt-Small si el PC lo permite; si no, ya no compensa seguir afinando esta variante antes de cambiar de backbone.
 
