@@ -64,6 +64,24 @@ def parse_args() -> argparse.Namespace:
         help="Peso de la loss de IVR cuando target=both (se normaliza con HPI).",
     )
     parser.add_argument("--huber-delta", type=float, default=1.0)
+    parser.add_argument(
+        "--ivr-distance-loss",
+        choices=["none", "huber", "mse"],
+        default="none",
+        help="Penalizacion extra solo para IVR basada en distancia entre clase esperada y etiqueta.",
+    )
+    parser.add_argument(
+        "--ivr-distance-weight",
+        type=float,
+        default=0.0,
+        help="Peso de la penalizacion de distancia de IVR (0 = desactivada).",
+    )
+    parser.add_argument(
+        "--ivr-distance-delta",
+        type=float,
+        default=1.0,
+        help="Delta de Huber para la penalizacion de distancia de IVR.",
+    )
     parser.add_argument("--workers", type=int, default=4)
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--device", default="auto", help="auto|cpu|cuda")
@@ -198,6 +216,10 @@ def decode_ordinal_logits(logits: torch.Tensor) -> torch.Tensor:
     return (probs > 0.5).sum(dim=1)
 
 
+def expected_ordinal_value(logits: torch.Tensor) -> torch.Tensor:
+    return torch.sigmoid(logits).sum(dim=1)
+
+
 class OrdinalBCELoss(nn.Module):
     def __init__(
         self,
@@ -206,6 +228,9 @@ class OrdinalBCELoss(nn.Module):
         num_classes_ivr: int,
         both_weight_hpi: float = 0.5,
         both_weight_ivr: float = 0.5,
+        ivr_distance_loss: str = "none",
+        ivr_distance_weight: float = 0.0,
+        ivr_distance_delta: float = 1.0,
     ):
         super().__init__()
         self.target = target
@@ -215,6 +240,27 @@ class OrdinalBCELoss(nn.Module):
         self.ivr_dim = num_classes_ivr - 1
         self.both_weight_hpi = both_weight_hpi
         self.both_weight_ivr = both_weight_ivr
+        self.ivr_distance_loss = ivr_distance_loss
+        self.ivr_distance_weight = ivr_distance_weight
+        self.ivr_distance_delta = ivr_distance_delta
+
+    def ivr_distance_penalty(
+        self, ivr_logits: torch.Tensor, ivr_labels: torch.Tensor
+    ) -> torch.Tensor:
+        if self.ivr_distance_loss == "none" or self.ivr_distance_weight <= 0:
+            return ivr_logits.new_tensor(0.0)
+
+        ivr_expected = expected_ordinal_value(ivr_logits)
+        ivr_targets = ivr_labels.to(torch.float32)
+        if self.ivr_distance_loss == "mse":
+            penalty = F.mse_loss(ivr_expected, ivr_targets)
+        else:
+            penalty = F.huber_loss(
+                ivr_expected,
+                ivr_targets,
+                delta=self.ivr_distance_delta,
+            )
+        return self.ivr_distance_weight * penalty
 
     def forward(self, logits: torch.Tensor, labels: torch.Tensor) -> torch.Tensor:
         if self.target == "both":
@@ -226,14 +272,18 @@ class OrdinalBCELoss(nn.Module):
 
             loss_hpi = F.binary_cross_entropy_with_logits(hpi_logits, hpi_levels)
             loss_ivr = F.binary_cross_entropy_with_logits(ivr_logits, ivr_levels)
-            return (self.both_weight_hpi * loss_hpi) + (self.both_weight_ivr * loss_ivr)
+            loss_ordinal = (self.both_weight_hpi * loss_hpi) + (
+                self.both_weight_ivr * loss_ivr
+            )
+            return loss_ordinal + self.ivr_distance_penalty(ivr_logits, labels[:, 1])
 
         if self.target == "hpi":
             levels = ordinal_levels(labels[:, 0], self.num_classes_hpi)
             return F.binary_cross_entropy_with_logits(logits, levels)
 
         levels = ordinal_levels(labels[:, 0], self.num_classes_ivr)
-        return F.binary_cross_entropy_with_logits(logits, levels)
+        loss_ordinal = F.binary_cross_entropy_with_logits(logits, levels)
+        return loss_ordinal + self.ivr_distance_penalty(logits, labels[:, 0])
 
 
 @dataclass
@@ -541,6 +591,17 @@ def main() -> None:
         both_weight_hpi = 1.0
         both_weight_ivr = 0.0
 
+    ivr_distance_weight = float(args.ivr_distance_weight)
+    if ivr_distance_weight < 0:
+        raise ValueError("--ivr-distance-weight debe ser >= 0.")
+    if args.ivr_distance_delta <= 0:
+        raise ValueError("--ivr-distance-delta debe ser > 0.")
+    if args.target == "hpi":
+        ivr_distance_loss = "none"
+        ivr_distance_weight = 0.0
+    else:
+        ivr_distance_loss = args.ivr_distance_loss
+
     train_loader = DataLoader(
         train_ds,
         batch_size=args.batch_size,
@@ -563,6 +624,9 @@ def main() -> None:
         num_classes_ivr=num_classes_ivr,
         both_weight_hpi=both_weight_hpi,
         both_weight_ivr=both_weight_ivr,
+        ivr_distance_loss=ivr_distance_loss,
+        ivr_distance_weight=ivr_distance_weight,
+        ivr_distance_delta=args.ivr_distance_delta,
     )
     optimizer = torch.optim.AdamW(
         model.parameters(), lr=args.lr, weight_decay=args.weight_decay
@@ -578,6 +642,8 @@ def main() -> None:
             "output_dim": output_dim,
             "both_loss_weight_hpi_effective": both_weight_hpi,
             "both_loss_weight_ivr_effective": both_weight_ivr,
+            "ivr_distance_loss_effective": ivr_distance_loss,
+            "ivr_distance_weight_effective": ivr_distance_weight,
         }
     )
     with (out_dir / "config.json").open("w", encoding="utf-8") as f:
@@ -595,6 +661,12 @@ def main() -> None:
     if args.target == "both":
         print(
             f"Pesos de loss both: hpi={both_weight_hpi:.3f} ivr={both_weight_ivr:.3f}"
+        )
+    if ivr_distance_loss != "none" and ivr_distance_weight > 0:
+        print(
+            "Penalizacion extra IVR: "
+            f"type={ivr_distance_loss} weight={ivr_distance_weight:.4f} "
+            f"delta={args.ivr_distance_delta:.4f}"
         )
 
     for epoch in range(1, args.epochs + 1):

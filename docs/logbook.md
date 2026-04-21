@@ -166,6 +166,7 @@ El resultado, comparado con el ponderado anterior (0.4/0.6) y con el run sin wei
 - `mae_ivr=1.8324`, también mejora frente a ambos runs anteriores.
 - En exact match baja un poco respecto al run sin weight, pero mejora en acierto dentro de ±1 y ±2.
 - En conjunto, esta configuración 0.3/0.7 es la mejor de las tres en error medio, aunque el RMSE sube ligeramente frente al ponderado anterior.
+
 2026-04-16 (parte 2)
 Se realizó un cambio en la loss ordinal inspirado en el paper "Rank consistent ordinal regression for neural networks with application to age estimation". La adición principal fue:
 1. Implementación de pesos ordinales por umbral (`ordinal_importance_weights` en 09_train_ordinal.py) que pondera la loss BCE de forma individual para cada threshold (frontera entre clases ordinales), no solo entre targets (HPI/IVR).
@@ -184,3 +185,21 @@ Se guardó la ejecución en '3_1_CORAL_1_cnvnxt_es', la comparación de sus resu
 2026-04-16 (parte 4)
 Se hizo un rollback a como se entrenaba antes de adaptarlo al CORAL y se decidió simplemente tratar de subir al small
 
+2026-04-17
+Comparativa entre `3_2_small_b4_cnvnxt` y la mejor run hasta ahora (`3_weighted_0307_cnvnxt_es`), manteniendo la misma idea de entrenamiento (`both`, pesos `0.3/0.7`, early stopping):
+1. `convnext_small` no mejora el mejor `convnext_tiny`: `mae_mean=1.2858` frente a `1.1948`.
+2. En HPI queda prácticamente igual, pero un poco peor: `mae_hpi=0.5616` frente a `0.5573`.
+3. El empeoramiento viene sobre todo de IVR: `mae_ivr=2.0100` frente a `1.8324`.
+4. También cae en acierto global discreto: `acc_mean exact=0.5201` vs `0.5451`, `within_1=0.7787` vs `0.8087`, `within_2=0.8288` vs `0.8395`.
+5. Conclusión: en esta configuración, subir el backbone a `ConvNeXt-Small` no compensa; la mejor run sigue siendo `3_weighted_0307_cnvnxt_es`.
+
+Pero esto puede deberse a que el batch usado en small fué 4, se repetirá el experimento con un batch de 8 para buscar mejora
+
+15 y 26 predicciones que realmente eran 7 se predijeron como 0 y 1. Igualmente hay 17, 11 y 10 que eran 0 1 y 2 y se predijeron como 6. También hay 53 0s que se predijeron como 7. Estos fallos tan lejanos hacen que baje mucho el IVR.
+
+2026-04-17 (parte 2)
+Se decide probar una modificación más dirigida al problema real de IVR:
+1. Se mantiene la loss ordinal actual como base.
+2. Se añade una penalización extra de distancia solo para IVR, calculada sobre la clase esperada suave (`sum(sigmoid(logits_ivr))`) frente a la etiqueta real.
+3. La idea es castigar más errores lejanos tipo `0->7`, `7->0`, `1->6`, etc., sin tocar HPI porque ahí no parece estar el problema principal.
+4. Se deja como opción configurable (`none`/`huber`/`mse` + peso) para poder compararlo limpiamente contra la baseline actual.
