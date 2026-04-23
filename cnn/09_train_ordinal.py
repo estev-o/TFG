@@ -9,13 +9,13 @@ import json
 import random
 from dataclasses import asdict, dataclass
 from pathlib import Path
-from typing import Iterable, Optional
+from typing import Iterable, Optional, Sequence
 
 import torch
 import torch.nn.functional as F
 from PIL import Image
 from torch import nn
-from torch.utils.data import DataLoader, Dataset, WeightedRandomSampler
+from torch.utils.data import DataLoader, Dataset
 from torchvision import transforms
 from torchvision.models import (
     ConvNeXt_Small_Weights,
@@ -63,42 +63,29 @@ def parse_args() -> argparse.Namespace:
         default=0.6,
         help="Peso de la loss de IVR cuando target=both (se normaliza con HPI).",
     )
+    parser.add_argument(
+        "--use-ivr-coarse-fine",
+        action="store_true",
+        help="Activa estrategia coarse-to-fine para IVR (regularizacion + decodificacion jerarquica).",
+    )
+    parser.add_argument(
+        "--ivr-coarse-bins",
+        default="0-2,3-5,6-7",
+        help="Bins coarse para IVR en formato '0-2,3-5,6-7'. Deben cubrir todo el rango.",
+    )
+    parser.add_argument(
+        "--ivr-coarse-loss-weight",
+        type=float,
+        default=0.3,
+        help="Peso de la loss coarse de IVR (solo si --use-ivr-coarse-fine).",
+    )
     parser.add_argument("--huber-delta", type=float, default=1.0)
-    parser.add_argument(
-        "--ivr-distance-loss",
-        choices=["none", "huber", "mse"],
-        default="none",
-        help="Compat: mantenido para no romper Makefile (no usado en esta version principal).",
-    )
-    parser.add_argument(
-        "--ivr-distance-weight",
-        type=float,
-        default=0.0,
-        help="Compat: mantenido para no romper Makefile (no usado en esta version principal).",
-    )
-    parser.add_argument(
-        "--ivr-distance-delta",
-        type=float,
-        default=1.0,
-        help="Compat: mantenido para no romper Makefile (no usado en esta version principal).",
-    )
     parser.add_argument("--workers", type=int, default=4)
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--device", default="auto", help="auto|cpu|cuda")
     parser.add_argument("--amp", action="store_true")
     parser.add_argument("--max-train-samples", type=int, default=0)
     parser.add_argument("--max-val-samples", type=int, default=0)
-    parser.add_argument(
-        "--use-weighted-sampler",
-        action="store_true",
-        help="Activa WeightedRandomSampler para balancear clases en train.",
-    )
-    parser.add_argument(
-        "--sampler-target",
-        choices=["auto", "hpi", "ivr"],
-        default="auto",
-        help="Variable usada para calcular pesos del sampler (auto: ivr en both, si no target actual).",
-    )
     parser.add_argument(
         "--early-stopping-patience",
         type=int,
@@ -227,25 +214,100 @@ def decode_ordinal_logits(logits: torch.Tensor) -> torch.Tensor:
     return (probs > 0.5).sum(dim=1)
 
 
-def resolve_sampler_target(sampler_target: str, training_target: str) -> str:
-    if sampler_target != "auto":
-        return sampler_target
-    if training_target == "both":
-        return "ivr"
-    return training_target
+def parse_ivr_coarse_bins(spec: str, num_classes_ivr: int) -> list[tuple[int, int]]:
+    bins: list[tuple[int, int]] = []
+    for part in [p.strip() for p in spec.split(",") if p.strip()]:
+        if "-" in part:
+            a_str, b_str = part.split("-", 1)
+            start = int(a_str.strip())
+            end = int(b_str.strip())
+        else:
+            start = int(part)
+            end = start
+        if start > end:
+            raise ValueError(f"Bin IVR invalido (start > end): {part}")
+        bins.append((start, end))
+
+    if not bins:
+        raise ValueError("Debe definirse al menos un bin coarse para IVR.")
+
+    bins = sorted(bins, key=lambda x: x[0])
+    prev_end = -1
+    for start, end in bins:
+        if start < 0 or end >= num_classes_ivr:
+            raise ValueError(
+                f"Bin IVR fuera de rango [0,{num_classes_ivr - 1}]: {start}-{end}"
+            )
+        if start <= prev_end:
+            raise ValueError(f"Bins IVR solapados: {start}-{end}")
+        prev_end = end
+
+    if bins[0][0] != 0 or bins[-1][1] != num_classes_ivr - 1:
+        raise ValueError(
+            f"Los bins IVR deben cubrir todo el rango [0,{num_classes_ivr - 1}]."
+        )
+
+    for i in range(1, len(bins)):
+        if bins[i - 1][1] + 1 != bins[i][0]:
+            raise ValueError("Los bins IVR deben ser contiguos sin huecos.")
+
+    return bins
 
 
-def compute_sample_weights(dataset: KelpOrdinalDataset, sampler_target: str) -> torch.DoubleTensor:
-    counts: dict[int, int] = {}
-    for _, hpi, ivr in dataset.samples:
-        label = ivr if sampler_target == "ivr" else hpi
-        counts[label] = counts.get(label, 0) + 1
+def ordinal_class_probs(logits: torch.Tensor) -> torch.Tensor:
+    """Convierte logits ordinales (K-1) a probabilidades de clase (K)."""
+    probs_gt = torch.sigmoid(logits)
+    n, km1 = probs_gt.shape
+    n_classes = km1 + 1
+    out = torch.zeros((n, n_classes), device=logits.device, dtype=logits.dtype)
+    out[:, 0] = 1.0 - probs_gt[:, 0]
+    if n_classes > 2:
+        out[:, 1:-1] = probs_gt[:, :-1] - probs_gt[:, 1:]
+    out[:, -1] = probs_gt[:, -1]
+    out = out.clamp_min(0.0)
+    out = out / out.sum(dim=1, keepdim=True).clamp_min(1e-8)
+    return out
 
-    weights: list[float] = []
-    for _, hpi, ivr in dataset.samples:
-        label = ivr if sampler_target == "ivr" else hpi
-        weights.append(1.0 / counts[label])
-    return torch.DoubleTensor(weights)
+
+def coarse_probs_from_class_probs(
+    class_probs: torch.Tensor, bins: Sequence[tuple[int, int]]
+) -> torch.Tensor:
+    coarse_probs = []
+    for start, end in bins:
+        coarse_probs.append(class_probs[:, start : end + 1].sum(dim=1))
+    out = torch.stack(coarse_probs, dim=1)
+    out = out / out.sum(dim=1, keepdim=True).clamp_min(1e-8)
+    return out
+
+
+def coarse_labels_from_ivr(
+    ivr_labels: torch.Tensor, bins: Sequence[tuple[int, int]]
+) -> torch.Tensor:
+    out = torch.full_like(ivr_labels, fill_value=-1)
+    for idx, (start, end) in enumerate(bins):
+        mask = (ivr_labels >= start) & (ivr_labels <= end)
+        out[mask] = idx
+    if (out < 0).any():
+        raise ValueError("Hay etiquetas IVR fuera de los bins coarse definidos.")
+    return out
+
+
+def decode_ivr_with_coarse_fine(
+    ivr_logits: torch.Tensor, bins: Sequence[tuple[int, int]]
+) -> torch.Tensor:
+    class_probs = ordinal_class_probs(ivr_logits)
+    coarse_probs = coarse_probs_from_class_probs(class_probs, bins)
+    coarse_idx = coarse_probs.argmax(dim=1)
+    pred = torch.zeros((ivr_logits.shape[0],), device=ivr_logits.device, dtype=torch.int64)
+
+    for bin_idx, (start, end) in enumerate(bins):
+        mask = coarse_idx == bin_idx
+        if not mask.any():
+            continue
+        local_probs = class_probs[mask, start : end + 1]
+        local_pred = local_probs.argmax(dim=1) + start
+        pred[mask] = local_pred.to(torch.int64)
+    return pred
 
 
 class OrdinalBCELoss(nn.Module):
@@ -256,6 +318,9 @@ class OrdinalBCELoss(nn.Module):
         num_classes_ivr: int,
         both_weight_hpi: float = 0.5,
         both_weight_ivr: float = 0.5,
+        use_ivr_coarse_fine: bool = False,
+        ivr_coarse_bins: Optional[Sequence[tuple[int, int]]] = None,
+        ivr_coarse_loss_weight: float = 0.3,
     ):
         super().__init__()
         self.target = target
@@ -265,6 +330,9 @@ class OrdinalBCELoss(nn.Module):
         self.ivr_dim = num_classes_ivr - 1
         self.both_weight_hpi = both_weight_hpi
         self.both_weight_ivr = both_weight_ivr
+        self.use_ivr_coarse_fine = use_ivr_coarse_fine
+        self.ivr_coarse_bins = list(ivr_coarse_bins or [])
+        self.ivr_coarse_loss_weight = ivr_coarse_loss_weight
 
     def forward(self, logits: torch.Tensor, labels: torch.Tensor) -> torch.Tensor:
         if self.target == "both":
@@ -276,14 +344,38 @@ class OrdinalBCELoss(nn.Module):
 
             loss_hpi = F.binary_cross_entropy_with_logits(hpi_logits, hpi_levels)
             loss_ivr = F.binary_cross_entropy_with_logits(ivr_logits, ivr_levels)
-            return (self.both_weight_hpi * loss_hpi) + (self.both_weight_ivr * loss_ivr)
+            base_loss = (self.both_weight_hpi * loss_hpi) + (
+                self.both_weight_ivr * loss_ivr
+            )
+            if self.use_ivr_coarse_fine:
+                coarse_targets = coarse_labels_from_ivr(labels[:, 1], self.ivr_coarse_bins)
+                ivr_class_probs = ordinal_class_probs(ivr_logits)
+                coarse_probs = coarse_probs_from_class_probs(
+                    ivr_class_probs, self.ivr_coarse_bins
+                )
+                coarse_loss = F.nll_loss(
+                    torch.log(coarse_probs.clamp_min(1e-8)), coarse_targets
+                )
+                return base_loss + (self.ivr_coarse_loss_weight * coarse_loss)
+            return base_loss
 
         if self.target == "hpi":
             levels = ordinal_levels(labels[:, 0], self.num_classes_hpi)
             return F.binary_cross_entropy_with_logits(logits, levels)
 
         levels = ordinal_levels(labels[:, 0], self.num_classes_ivr)
-        return F.binary_cross_entropy_with_logits(logits, levels)
+        base_loss = F.binary_cross_entropy_with_logits(logits, levels)
+        if self.use_ivr_coarse_fine:
+            coarse_targets = coarse_labels_from_ivr(labels[:, 0], self.ivr_coarse_bins)
+            ivr_class_probs = ordinal_class_probs(logits)
+            coarse_probs = coarse_probs_from_class_probs(
+                ivr_class_probs, self.ivr_coarse_bins
+            )
+            coarse_loss = F.nll_loss(
+                torch.log(coarse_probs.clamp_min(1e-8)), coarse_targets
+            )
+            return base_loss + (self.ivr_coarse_loss_weight * coarse_loss)
+        return base_loss
 
 
 @dataclass
@@ -301,14 +393,23 @@ def decode_predictions(
     target: str,
     num_classes_hpi: int,
     num_classes_ivr: int,
+    use_ivr_coarse_fine: bool = False,
+    ivr_coarse_bins: Optional[Sequence[tuple[int, int]]] = None,
 ) -> torch.Tensor:
     if target == "both":
         hpi_dim = num_classes_hpi - 1
         hpi_pred = decode_ordinal_logits(logits[:, :hpi_dim])
-        ivr_pred = decode_ordinal_logits(logits[:, hpi_dim:])
+        ivr_logits = logits[:, hpi_dim:]
+        if use_ivr_coarse_fine:
+            ivr_pred = decode_ivr_with_coarse_fine(ivr_logits, ivr_coarse_bins or [])
+        else:
+            ivr_pred = decode_ordinal_logits(ivr_logits)
         return torch.stack([hpi_pred, ivr_pred], dim=1).to(torch.float32)
 
-    pred = decode_ordinal_logits(logits)
+    if target == "ivr" and use_ivr_coarse_fine:
+        pred = decode_ivr_with_coarse_fine(logits, ivr_coarse_bins or [])
+    else:
+        pred = decode_ordinal_logits(logits)
     return pred.unsqueeze(1).to(torch.float32)
 
 
@@ -355,6 +456,8 @@ def run_epoch_val(
     target: str,
     num_classes_hpi: int,
     num_classes_ivr: int,
+    use_ivr_coarse_fine: bool = False,
+    ivr_coarse_bins: Optional[Sequence[tuple[int, int]]] = None,
 ) -> tuple[float, Optional[float], Optional[float], float]:
     model.eval()
     total_loss = 0.0
@@ -372,7 +475,14 @@ def run_epoch_val(
                 out_dim = logits.shape[1]
             loss = criterion(logits, y)
 
-            pred = decode_predictions(logits, target, num_classes_hpi, num_classes_ivr)
+            pred = decode_predictions(
+                logits,
+                target,
+                num_classes_hpi,
+                num_classes_ivr,
+                use_ivr_coarse_fine=use_ivr_coarse_fine,
+                ivr_coarse_bins=ivr_coarse_bins,
+            )
             abs_err = (pred - y.to(torch.float32)).abs()
             bs = y.size(0)
             total_loss += float(loss.item()) * bs
@@ -591,22 +701,21 @@ def main() -> None:
         both_weight_hpi = 1.0
         both_weight_ivr = 0.0
 
-    sampler_target_effective = ""
-    train_sampler: Optional[WeightedRandomSampler] = None
-    if args.use_weighted_sampler:
-        sampler_target_effective = resolve_sampler_target(args.sampler_target, args.target)
-        sample_weights = compute_sample_weights(train_ds, sampler_target=sampler_target_effective)
-        train_sampler = WeightedRandomSampler(
-            weights=sample_weights,
-            num_samples=len(sample_weights),
-            replacement=True,
+    ivr_coarse_bins_effective: list[tuple[int, int]] = []
+    use_ivr_coarse_fine_effective = bool(args.use_ivr_coarse_fine and args.target in {"both", "ivr"})
+    if args.use_ivr_coarse_fine and args.target == "hpi":
+        print("Aviso: --use-ivr-coarse-fine se ignora cuando target=hpi.")
+    if use_ivr_coarse_fine_effective:
+        if args.ivr_coarse_loss_weight < 0:
+            raise ValueError("--ivr-coarse-loss-weight debe ser >= 0.")
+        ivr_coarse_bins_effective = parse_ivr_coarse_bins(
+            args.ivr_coarse_bins, num_classes_ivr
         )
 
     train_loader = DataLoader(
         train_ds,
         batch_size=args.batch_size,
-        shuffle=train_sampler is None,
-        sampler=train_sampler,
+        shuffle=True,
         num_workers=args.workers,
         pin_memory=device.type == "cuda",
     )
@@ -625,6 +734,9 @@ def main() -> None:
         num_classes_ivr=num_classes_ivr,
         both_weight_hpi=both_weight_hpi,
         both_weight_ivr=both_weight_ivr,
+        use_ivr_coarse_fine=use_ivr_coarse_fine_effective,
+        ivr_coarse_bins=ivr_coarse_bins_effective,
+        ivr_coarse_loss_weight=args.ivr_coarse_loss_weight,
     )
     optimizer = torch.optim.AdamW(
         model.parameters(), lr=args.lr, weight_decay=args.weight_decay
@@ -640,8 +752,8 @@ def main() -> None:
             "output_dim": output_dim,
             "both_loss_weight_hpi_effective": both_weight_hpi,
             "both_loss_weight_ivr_effective": both_weight_ivr,
-            "weighted_sampler_enabled": bool(args.use_weighted_sampler),
-            "weighted_sampler_target_effective": sampler_target_effective,
+            "use_ivr_coarse_fine_effective": use_ivr_coarse_fine_effective,
+            "ivr_coarse_bins_effective": ivr_coarse_bins_effective,
         }
     )
     with (out_dir / "config.json").open("w", encoding="utf-8") as f:
@@ -660,9 +772,10 @@ def main() -> None:
         print(
             f"Pesos de loss both: hpi={both_weight_hpi:.3f} ivr={both_weight_ivr:.3f}"
         )
-    if args.use_weighted_sampler:
+    if use_ivr_coarse_fine_effective:
         print(
-            f"WeightedRandomSampler activo (target={sampler_target_effective})"
+            f"IVR coarse-to-fine activo: bins={ivr_coarse_bins_effective} "
+            f"w_coarse={args.ivr_coarse_loss_weight:.3f}"
         )
 
     for epoch in range(1, args.epochs + 1):
@@ -677,6 +790,8 @@ def main() -> None:
             args.target,
             num_classes_hpi,
             num_classes_ivr,
+            use_ivr_coarse_fine=use_ivr_coarse_fine_effective,
+            ivr_coarse_bins=ivr_coarse_bins_effective,
         )
 
         metrics = EpochMetrics(
@@ -698,6 +813,8 @@ def main() -> None:
             "num_classes_hpi": num_classes_hpi,
             "num_classes_ivr": num_classes_ivr,
             "output_dim": output_dim,
+            "use_ivr_coarse_fine_effective": use_ivr_coarse_fine_effective,
+            "ivr_coarse_bins_effective": ivr_coarse_bins_effective,
         }
         torch.save(ckpt_payload, out_dir / "last.pt")
         improvement = best_mae - mae_mean

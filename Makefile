@@ -1,4 +1,4 @@
-.PHONY: help clean run1 run1_debug run2 run2_debug run2_all run2_debug_individual run3 train_yolo apply_yolo normalize_out cnn_prepare cnn_train cnn_smoke cnn_test cnn_train_hpi cnn_train_ivr cnn_train_both
+.PHONY: help clean run1 run1_debug run2 run2_debug run2_all run2_debug_individual run3 train_yolo apply_yolo normalize_out cnn_prepare cnn_train cnn_smoke cnn_test cnn_train_hpi cnn_train_ivr cnn_train_both cnn_train_both_highres
 
 # Variables
 VENV = .venv
@@ -58,10 +58,12 @@ CNN_LOSS ?= ordinal_bce
 CNN_BOTH_W_HPI ?= 0.4
 CNN_BOTH_W_IVR ?= 0.6
 CNN_HUBER_DELTA ?= 1.0
-CNN_IVR_DIST_LOSS ?= none
-CNN_IVR_DIST_WEIGHT ?= 0.0
-CNN_IVR_DIST_DELTA ?= 1.0
+CNN_USE_IVR_COARSE_FINE ?= 0
+CNN_IVR_COARSE_BINS ?= 0-2,3-5,6-7
+CNN_IVR_COARSE_LOSS_WEIGHT ?= 0.3
 CNN_IMG ?= 224
+CNN_HIGHRES_IMG ?= 384
+CNN_HIGHRES_BATCH ?= 4
 CNN_WORKERS ?= 4
 CNN_DEVICE ?= auto
 CNN_AMP ?= 0
@@ -69,8 +71,6 @@ CNN_MAX_TRAIN ?= 0
 CNN_MAX_VAL ?= 0
 CNN_ES_PATIENCE ?= 0
 CNN_ES_MIN_DELTA ?= 0.0
-CNN_USE_WEIGHTED_SAMPLER ?= 0
-CNN_SAMPLER_TARGET ?= auto
 CNN_TEST_RUN_DIR ?= cnn/runs/clas_ordinal_hpi_convnext_tiny_e30
 CNN_TEST_CSV ?= cnn/splits/test.csv
 CNN_TEST_CKPT ?= best.pt
@@ -173,7 +173,7 @@ cnn_prepare: ## Genera manifest.csv y train/val/test para CNN en un único paso
 
 cnn_train: ## Entrena la CNN ordinal (HPI, IVR)
 	@echo "$(BLUE)Entrenando CNN $(CNN_MODEL) target=$(CNN_TARGET) en $(CNN_DEVICE) (epochs=$(CNN_EPOCHS), batch=$(CNN_BATCH))...$(NC)"
-	$(PYTHON) $(SCRIPT_CNN_TRAIN) --train-csv $(CNN_TRAIN_CSV) --val-csv $(CNN_VAL_CSV) --out-dir $(CNN_RUN_DIR) --model $(CNN_MODEL) --target $(CNN_TARGET) --img-size $(CNN_IMG) --epochs $(CNN_EPOCHS) --batch-size $(CNN_BATCH) --lr $(CNN_LR) --weight-decay $(CNN_WD) --loss $(CNN_LOSS) --both-loss-weight-hpi $(CNN_BOTH_W_HPI) --both-loss-weight-ivr $(CNN_BOTH_W_IVR) --huber-delta $(CNN_HUBER_DELTA) --ivr-distance-loss $(CNN_IVR_DIST_LOSS) --ivr-distance-weight $(CNN_IVR_DIST_WEIGHT) --ivr-distance-delta $(CNN_IVR_DIST_DELTA) --workers $(CNN_WORKERS) --seed $(CNN_SEED) --device $(CNN_DEVICE) --max-train-samples $(CNN_MAX_TRAIN) --max-val-samples $(CNN_MAX_VAL) --early-stopping-patience $(CNN_ES_PATIENCE) --early-stopping-min-delta $(CNN_ES_MIN_DELTA) --sampler-target $(CNN_SAMPLER_TARGET) $(if $(filter 1 true TRUE yes YES,$(CNN_USE_WEIGHTED_SAMPLER)),--use-weighted-sampler,) $(if $(filter 1 true TRUE yes YES,$(CNN_PRETRAINED)),--pretrained,) $(if $(filter 1 true TRUE yes YES,$(CNN_AMP)),--amp,)
+	$(PYTHON) $(SCRIPT_CNN_TRAIN) --train-csv $(CNN_TRAIN_CSV) --val-csv $(CNN_VAL_CSV) --out-dir $(CNN_RUN_DIR) --model $(CNN_MODEL) --target $(CNN_TARGET) --img-size $(CNN_IMG) --epochs $(CNN_EPOCHS) --batch-size $(CNN_BATCH) --lr $(CNN_LR) --weight-decay $(CNN_WD) --loss $(CNN_LOSS) --both-loss-weight-hpi $(CNN_BOTH_W_HPI) --both-loss-weight-ivr $(CNN_BOTH_W_IVR) $(if $(filter 1 true TRUE yes YES,$(CNN_USE_IVR_COARSE_FINE)),--use-ivr-coarse-fine,) --ivr-coarse-bins "$(CNN_IVR_COARSE_BINS)" --ivr-coarse-loss-weight $(CNN_IVR_COARSE_LOSS_WEIGHT) --huber-delta $(CNN_HUBER_DELTA) --workers $(CNN_WORKERS) --seed $(CNN_SEED) --device $(CNN_DEVICE) --max-train-samples $(CNN_MAX_TRAIN) --max-val-samples $(CNN_MAX_VAL) --early-stopping-patience $(CNN_ES_PATIENCE) --early-stopping-min-delta $(CNN_ES_MIN_DELTA) $(if $(filter 1 true TRUE yes YES,$(CNN_PRETRAINED)),--pretrained,) $(if $(filter 1 true TRUE yes YES,$(CNN_AMP)),--amp,)
 	@echo "$(GREEN)Entrenamiento CNN finalizado. Salida: $(CNN_RUN_DIR)$(NC)"
 
 cnn_smoke: ## Smoke test CNN rápido con ConvNeXt-Small (1 época, pocas muestras, CPU)
@@ -194,3 +194,6 @@ cnn_train_ivr: ## Nuevo flujo: ConvNeXt-Tiny solo para IVR
 
 cnn_train_both: ## Nuevo flujo: ConvNeXt-Tiny para [HPI, IVR]
 	@$(MAKE) cnn_train CNN_MODEL=convnext_tiny CNN_TARGET=both CNN_PRETRAINED=1 CNN_RUN_DIR=cnn/runs/real_convnext_tiny_both_e$(CNN_EPOCHS)
+
+cnn_train_both_highres: ## ConvNeXt-Tiny both a alta resolucion (img=384 por defecto)
+	@$(MAKE) cnn_train CNN_MODEL=convnext_tiny CNN_TARGET=both CNN_PRETRAINED=1 CNN_IMG=$(CNN_HIGHRES_IMG) CNN_BATCH=$(CNN_HIGHRES_BATCH) CNN_RUN_DIR=cnn/runs/highres_convnext_tiny_both_i$(CNN_HIGHRES_IMG)_e$(CNN_EPOCHS)

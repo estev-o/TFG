@@ -217,3 +217,11 @@ Se implementa `WeightedRandomSampler` en `09_train_ordinal.py` (opcional y confi
 2. Se calcula peso por muestra como inversa de frecuencia de clase y se usa `replacement=True`.
 3. Se integra también en `Makefile` con `CNN_USE_WEIGHTED_SAMPLER` y `CNN_SAMPLER_TARGET`.
 Esperado: mejorar aprendizaje de clases raras de IVR, reduciendo errores extremos (p. ej. 0->7 / 7->0) y mejorando especialmente `mae_ivr` y aciertos dentro de ±1/±2.
+
+2026-04-23
+Tras varias iteraciones de ajuste fino (weights, losses auxiliares y variantes CORAL) sin mejora robusta en IVR, se aplica un cambio de enfoque más estructural para paliar errores extremos:
+1. Alta resolución: se añade target de entrenamiento `cnn_train_both_highres` (ConvNeXt-Tiny en `img=384`) para preservar más detalle visual de mordidas finas.
+2. Coarse-to-fine para IVR (en `09_train_ordinal.py` y alineado también en `10_test_cnn.py`):
+   - Nueva opción `--use-ivr-coarse-fine` con bins configurables (`--ivr-coarse-bins`, por defecto `0-2,3-5,6-7`).
+   - Se añade una loss coarse auxiliar de IVR (`--ivr-coarse-loss-weight`) y una decodificación jerárquica en inferencia (primero bin coarse, luego clase fina dentro del bin).
+3. Objetivo esperado: reducir fallos lejanos tipo `0->7` / `7->0` en IVR, mejorando especialmente `mae_ivr` y el acierto dentro de ±1/±2.

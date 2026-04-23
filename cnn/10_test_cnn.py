@@ -7,7 +7,7 @@ import argparse
 import csv
 import json
 from pathlib import Path
-from typing import Any
+from typing import Any, Optional, Sequence
 
 import torch
 from PIL import Image
@@ -138,19 +138,83 @@ def decode_ordinal_logits(logits: torch.Tensor) -> torch.Tensor:
     return (probs > 0.5).sum(dim=1)
 
 
+def ordinal_class_probs(logits: torch.Tensor) -> torch.Tensor:
+    probs_gt = torch.sigmoid(logits)
+    n, km1 = probs_gt.shape
+    n_classes = km1 + 1
+    out = torch.zeros((n, n_classes), device=logits.device, dtype=logits.dtype)
+    out[:, 0] = 1.0 - probs_gt[:, 0]
+    if n_classes > 2:
+        out[:, 1:-1] = probs_gt[:, :-1] - probs_gt[:, 1:]
+    out[:, -1] = probs_gt[:, -1]
+    out = out.clamp_min(0.0)
+    out = out / out.sum(dim=1, keepdim=True).clamp_min(1e-8)
+    return out
+
+
+def coarse_probs_from_class_probs(
+    class_probs: torch.Tensor, bins: Sequence[tuple[int, int]]
+) -> torch.Tensor:
+    coarse_probs = []
+    for start, end in bins:
+        coarse_probs.append(class_probs[:, start : end + 1].sum(dim=1))
+    out = torch.stack(coarse_probs, dim=1)
+    out = out / out.sum(dim=1, keepdim=True).clamp_min(1e-8)
+    return out
+
+
+def decode_ivr_with_coarse_fine(
+    ivr_logits: torch.Tensor, bins: Sequence[tuple[int, int]]
+) -> torch.Tensor:
+    class_probs = ordinal_class_probs(ivr_logits)
+    coarse_probs = coarse_probs_from_class_probs(class_probs, bins)
+    coarse_idx = coarse_probs.argmax(dim=1)
+    pred = torch.zeros((ivr_logits.shape[0],), device=ivr_logits.device, dtype=torch.int64)
+    for bin_idx, (start, end) in enumerate(bins):
+        mask = coarse_idx == bin_idx
+        if not mask.any():
+            continue
+        local_probs = class_probs[mask, start : end + 1]
+        local_pred = local_probs.argmax(dim=1) + start
+        pred[mask] = local_pred.to(torch.int64)
+    return pred
+
+
+def parse_bins_from_config(raw: Any) -> list[tuple[int, int]]:
+    if raw is None:
+        return []
+    bins: list[tuple[int, int]] = []
+    for item in raw:
+        if not isinstance(item, (list, tuple)) or len(item) != 2:
+            raise ValueError(f"Bin coarse invalido en config: {item}")
+        start = int(item[0])
+        end = int(item[1])
+        bins.append((start, end))
+    return bins
+
+
 def decode_predictions(
     logits: torch.Tensor,
     target: str,
     num_classes_hpi: int,
     num_classes_ivr: int,
+    use_ivr_coarse_fine: bool = False,
+    ivr_coarse_bins: Optional[Sequence[tuple[int, int]]] = None,
 ) -> torch.Tensor:
     if target == "both":
         hpi_dim = num_classes_hpi - 1
         pred_hpi = decode_ordinal_logits(logits[:, :hpi_dim])
-        pred_ivr = decode_ordinal_logits(logits[:, hpi_dim:])
+        ivr_logits = logits[:, hpi_dim:]
+        if use_ivr_coarse_fine:
+            pred_ivr = decode_ivr_with_coarse_fine(ivr_logits, ivr_coarse_bins or [])
+        else:
+            pred_ivr = decode_ordinal_logits(ivr_logits)
         return torch.stack([pred_hpi, pred_ivr], dim=1).to(torch.int64)
 
-    pred = decode_ordinal_logits(logits)
+    if target == "ivr" and use_ivr_coarse_fine:
+        pred = decode_ivr_with_coarse_fine(logits, ivr_coarse_bins or [])
+    else:
+        pred = decode_ordinal_logits(logits)
     return pred.unsqueeze(1).to(torch.int64)
 
 
@@ -344,6 +408,12 @@ def main() -> None:
     num_classes_ivr = int(config.get("num_classes_ivr", 0))
     if num_classes_hpi < 2 or num_classes_ivr < 2:
         raise ValueError("num_classes_hpi/num_classes_ivr invalidos en config.json")
+    use_ivr_coarse_fine = bool(config.get("use_ivr_coarse_fine_effective", False))
+    ivr_coarse_bins = parse_bins_from_config(config.get("ivr_coarse_bins_effective", []))
+    if use_ivr_coarse_fine and not ivr_coarse_bins:
+        raise ValueError(
+            "Run marcada con coarse-to-fine pero sin ivr_coarse_bins_effective en config."
+        )
 
     img_size = args.img_size if args.img_size > 0 else int(config.get("img_size", 224))
     checkpoint_path = run_dir / args.checkpoint
@@ -384,7 +454,14 @@ def main() -> None:
         for x, y, batch_codes, batch_paths in test_loader:
             x = x.to(device, non_blocking=True)
             logits = model(x).cpu()
-            pred = decode_predictions(logits, target_name, num_classes_hpi, num_classes_ivr)
+            pred = decode_predictions(
+                logits,
+                target_name,
+                num_classes_hpi,
+                num_classes_ivr,
+                use_ivr_coarse_fine=use_ivr_coarse_fine,
+                ivr_coarse_bins=ivr_coarse_bins,
+            )
             y_true_parts.append(y)
             y_pred_parts.append(pred)
             photo_codes.extend(batch_codes)
@@ -463,6 +540,8 @@ def main() -> None:
         "head_type": head_type,
         "num_classes_hpi": num_classes_hpi,
         "num_classes_ivr": num_classes_ivr,
+        "use_ivr_coarse_fine_effective": use_ivr_coarse_fine,
+        "ivr_coarse_bins_effective": ivr_coarse_bins,
         "n_test_samples": len(test_ds),
         "1_mae": {
             "mae_hpi": mae_hpi,
@@ -498,6 +577,8 @@ def main() -> None:
     if target_name == "both":
         print(f"1) MAE: mae_hpi={mae_hpi:.4f} mae_ivr={mae_ivr:.4f} mae_mean={mae_mean:.4f}")
         print(f"2) RMSE: rmse_hpi={rmse_hpi:.4f} rmse_ivr={rmse_ivr:.4f} rmse_mean={rmse_mean:.4f}")
+        if use_ivr_coarse_fine:
+            print(f"   IVR coarse-to-fine: bins={ivr_coarse_bins}")
         print(
             "3) Acc discreta: "
             f"exact acc_hpi={acc_exact['acc_hpi']:.4f} acc_ivr={acc_exact['acc_ivr']:.4f} acc_both={acc_exact['acc_both']:.4f}; "
