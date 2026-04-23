@@ -203,3 +203,17 @@ Se decide probar una modificación más dirigida al problema real de IVR:
 2. Se añade una penalización extra de distancia solo para IVR, calculada sobre la clase esperada suave (`sum(sigmoid(logits_ivr))`) frente a la etiqueta real.
 3. La idea es castigar más errores lejanos tipo `0->7`, `7->0`, `1->6`, etc., sin tocar HPI porque ahí no parece estar el problema principal.
 4. Se deja como opción configurable (`none`/`huber`/`mse` + peso) para poder compararlo limpiamente contra la baseline actual.
+
+2026-04-22
+Se hizo rollback de la prueba de penalización extra por distancia en IVR y se archivó como experimento aparte:
+1. El script principal vuelve a quedar en `09_train_ordinal.py`, manteniendo la variante experimental archivada en `09.2_train_ordinal_hubert_mse.py`.
+2. Se probaron variantes con penalización `Huber` y `MSE` sobre IVR para castigar más errores lejanos, pero no dieron una mejora clara ni suficientemente grande sobre la baseline actual.
+3. En el mejor caso la mejora en `mae_ivr` fue marginal y en otras pruebas incluso quedó por detrás del baseline, así que no compensa mantener esta línea como entrenamiento principal por ahora.
+4. Siguiente paso: repetir `ConvNeXt-Small` con mayor `batch size` (subiendo desde `batch=4`) para comprobar si parte del mal resultado anterior venía de la configuración de entrenamiento y no del backbone en sí.
+
+2026-04-23
+Se implementa `WeightedRandomSampler` en `09_train_ordinal.py` (opcional y configurable) para balancear clases en train:
+1. Nuevos flags: `--use-weighted-sampler` y `--sampler-target auto|hpi|ivr` (en `both`, `auto -> ivr`).
+2. Se calcula peso por muestra como inversa de frecuencia de clase y se usa `replacement=True`.
+3. Se integra también en `Makefile` con `CNN_USE_WEIGHTED_SAMPLER` y `CNN_SAMPLER_TARGET`.
+Esperado: mejorar aprendizaje de clases raras de IVR, reduciendo errores extremos (p. ej. 0->7 / 7->0) y mejorando especialmente `mae_ivr` y aciertos dentro de ±1/±2.

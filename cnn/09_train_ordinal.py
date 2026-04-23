@@ -15,7 +15,7 @@ import torch
 import torch.nn.functional as F
 from PIL import Image
 from torch import nn
-from torch.utils.data import DataLoader, Dataset
+from torch.utils.data import DataLoader, Dataset, WeightedRandomSampler
 from torchvision import transforms
 from torchvision.models import (
     ConvNeXt_Small_Weights,
@@ -64,12 +64,41 @@ def parse_args() -> argparse.Namespace:
         help="Peso de la loss de IVR cuando target=both (se normaliza con HPI).",
     )
     parser.add_argument("--huber-delta", type=float, default=1.0)
+    parser.add_argument(
+        "--ivr-distance-loss",
+        choices=["none", "huber", "mse"],
+        default="none",
+        help="Compat: mantenido para no romper Makefile (no usado en esta version principal).",
+    )
+    parser.add_argument(
+        "--ivr-distance-weight",
+        type=float,
+        default=0.0,
+        help="Compat: mantenido para no romper Makefile (no usado en esta version principal).",
+    )
+    parser.add_argument(
+        "--ivr-distance-delta",
+        type=float,
+        default=1.0,
+        help="Compat: mantenido para no romper Makefile (no usado en esta version principal).",
+    )
     parser.add_argument("--workers", type=int, default=4)
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--device", default="auto", help="auto|cpu|cuda")
     parser.add_argument("--amp", action="store_true")
     parser.add_argument("--max-train-samples", type=int, default=0)
     parser.add_argument("--max-val-samples", type=int, default=0)
+    parser.add_argument(
+        "--use-weighted-sampler",
+        action="store_true",
+        help="Activa WeightedRandomSampler para balancear clases en train.",
+    )
+    parser.add_argument(
+        "--sampler-target",
+        choices=["auto", "hpi", "ivr"],
+        default="auto",
+        help="Variable usada para calcular pesos del sampler (auto: ivr en both, si no target actual).",
+    )
     parser.add_argument(
         "--early-stopping-patience",
         type=int,
@@ -196,6 +225,27 @@ def ordinal_levels(labels: torch.Tensor, num_classes: int) -> torch.Tensor:
 def decode_ordinal_logits(logits: torch.Tensor) -> torch.Tensor:
     probs = torch.sigmoid(logits)
     return (probs > 0.5).sum(dim=1)
+
+
+def resolve_sampler_target(sampler_target: str, training_target: str) -> str:
+    if sampler_target != "auto":
+        return sampler_target
+    if training_target == "both":
+        return "ivr"
+    return training_target
+
+
+def compute_sample_weights(dataset: KelpOrdinalDataset, sampler_target: str) -> torch.DoubleTensor:
+    counts: dict[int, int] = {}
+    for _, hpi, ivr in dataset.samples:
+        label = ivr if sampler_target == "ivr" else hpi
+        counts[label] = counts.get(label, 0) + 1
+
+    weights: list[float] = []
+    for _, hpi, ivr in dataset.samples:
+        label = ivr if sampler_target == "ivr" else hpi
+        weights.append(1.0 / counts[label])
+    return torch.DoubleTensor(weights)
 
 
 class OrdinalBCELoss(nn.Module):
@@ -541,10 +591,22 @@ def main() -> None:
         both_weight_hpi = 1.0
         both_weight_ivr = 0.0
 
+    sampler_target_effective = ""
+    train_sampler: Optional[WeightedRandomSampler] = None
+    if args.use_weighted_sampler:
+        sampler_target_effective = resolve_sampler_target(args.sampler_target, args.target)
+        sample_weights = compute_sample_weights(train_ds, sampler_target=sampler_target_effective)
+        train_sampler = WeightedRandomSampler(
+            weights=sample_weights,
+            num_samples=len(sample_weights),
+            replacement=True,
+        )
+
     train_loader = DataLoader(
         train_ds,
         batch_size=args.batch_size,
-        shuffle=True,
+        shuffle=train_sampler is None,
+        sampler=train_sampler,
         num_workers=args.workers,
         pin_memory=device.type == "cuda",
     )
@@ -578,6 +640,8 @@ def main() -> None:
             "output_dim": output_dim,
             "both_loss_weight_hpi_effective": both_weight_hpi,
             "both_loss_weight_ivr_effective": both_weight_ivr,
+            "weighted_sampler_enabled": bool(args.use_weighted_sampler),
+            "weighted_sampler_target_effective": sampler_target_effective,
         }
     )
     with (out_dir / "config.json").open("w", encoding="utf-8") as f:
@@ -595,6 +659,10 @@ def main() -> None:
     if args.target == "both":
         print(
             f"Pesos de loss both: hpi={both_weight_hpi:.3f} ivr={both_weight_ivr:.3f}"
+        )
+    if args.use_weighted_sampler:
+        print(
+            f"WeightedRandomSampler activo (target={sampler_target_effective})"
         )
 
     for epoch in range(1, args.epochs + 1):

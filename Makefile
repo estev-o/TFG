@@ -69,6 +69,8 @@ CNN_MAX_TRAIN ?= 0
 CNN_MAX_VAL ?= 0
 CNN_ES_PATIENCE ?= 0
 CNN_ES_MIN_DELTA ?= 0.0
+CNN_USE_WEIGHTED_SAMPLER ?= 0
+CNN_SAMPLER_TARGET ?= auto
 CNN_TEST_RUN_DIR ?= cnn/runs/clas_ordinal_hpi_convnext_tiny_e30
 CNN_TEST_CSV ?= cnn/splits/test.csv
 CNN_TEST_CKPT ?= best.pt
@@ -171,7 +173,7 @@ cnn_prepare: ## Genera manifest.csv y train/val/test para CNN en un único paso
 
 cnn_train: ## Entrena la CNN ordinal (HPI, IVR)
 	@echo "$(BLUE)Entrenando CNN $(CNN_MODEL) target=$(CNN_TARGET) en $(CNN_DEVICE) (epochs=$(CNN_EPOCHS), batch=$(CNN_BATCH))...$(NC)"
-	$(PYTHON) $(SCRIPT_CNN_TRAIN) --train-csv $(CNN_TRAIN_CSV) --val-csv $(CNN_VAL_CSV) --out-dir $(CNN_RUN_DIR) --model $(CNN_MODEL) --target $(CNN_TARGET) --img-size $(CNN_IMG) --epochs $(CNN_EPOCHS) --batch-size $(CNN_BATCH) --lr $(CNN_LR) --weight-decay $(CNN_WD) --loss $(CNN_LOSS) --both-loss-weight-hpi $(CNN_BOTH_W_HPI) --both-loss-weight-ivr $(CNN_BOTH_W_IVR) --huber-delta $(CNN_HUBER_DELTA) --ivr-distance-loss $(CNN_IVR_DIST_LOSS) --ivr-distance-weight $(CNN_IVR_DIST_WEIGHT) --ivr-distance-delta $(CNN_IVR_DIST_DELTA) --workers $(CNN_WORKERS) --seed $(CNN_SEED) --device $(CNN_DEVICE) --max-train-samples $(CNN_MAX_TRAIN) --max-val-samples $(CNN_MAX_VAL) --early-stopping-patience $(CNN_ES_PATIENCE) --early-stopping-min-delta $(CNN_ES_MIN_DELTA) $(if $(filter 1 true TRUE yes YES,$(CNN_PRETRAINED)),--pretrained,) $(if $(filter 1 true TRUE yes YES,$(CNN_AMP)),--amp,)
+	$(PYTHON) $(SCRIPT_CNN_TRAIN) --train-csv $(CNN_TRAIN_CSV) --val-csv $(CNN_VAL_CSV) --out-dir $(CNN_RUN_DIR) --model $(CNN_MODEL) --target $(CNN_TARGET) --img-size $(CNN_IMG) --epochs $(CNN_EPOCHS) --batch-size $(CNN_BATCH) --lr $(CNN_LR) --weight-decay $(CNN_WD) --loss $(CNN_LOSS) --both-loss-weight-hpi $(CNN_BOTH_W_HPI) --both-loss-weight-ivr $(CNN_BOTH_W_IVR) --huber-delta $(CNN_HUBER_DELTA) --ivr-distance-loss $(CNN_IVR_DIST_LOSS) --ivr-distance-weight $(CNN_IVR_DIST_WEIGHT) --ivr-distance-delta $(CNN_IVR_DIST_DELTA) --workers $(CNN_WORKERS) --seed $(CNN_SEED) --device $(CNN_DEVICE) --max-train-samples $(CNN_MAX_TRAIN) --max-val-samples $(CNN_MAX_VAL) --early-stopping-patience $(CNN_ES_PATIENCE) --early-stopping-min-delta $(CNN_ES_MIN_DELTA) --sampler-target $(CNN_SAMPLER_TARGET) $(if $(filter 1 true TRUE yes YES,$(CNN_USE_WEIGHTED_SAMPLER)),--use-weighted-sampler,) $(if $(filter 1 true TRUE yes YES,$(CNN_PRETRAINED)),--pretrained,) $(if $(filter 1 true TRUE yes YES,$(CNN_AMP)),--amp,)
 	@echo "$(GREEN)Entrenamiento CNN finalizado. Salida: $(CNN_RUN_DIR)$(NC)"
 
 cnn_smoke: ## Smoke test CNN rápido con ConvNeXt-Small (1 época, pocas muestras, CPU)
