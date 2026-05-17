@@ -5,7 +5,9 @@ from __future__ import annotations
 
 import argparse
 import csv
+import importlib.util
 import json
+import shutil
 from pathlib import Path
 from typing import Any, Optional, Sequence
 
@@ -37,6 +39,12 @@ def parse_args() -> argparse.Namespace:
         "--output-dir",
         default="",
         help="Directorio de salida. Si vacio: <run-dir>/test_eval",
+    )
+    parser.add_argument(
+        "--heatmap-limit",
+        type=int,
+        default=0,
+        help="Numero maximo de imagenes para generar heatmaps (0 = todas).",
     )
     return parser.parse_args()
 
@@ -72,20 +80,57 @@ def parse_int_label(raw: str, field: str) -> int:
     return rounded
 
 
+def remap_raw_ivr_label(
+    raw_ivr: int, bins: Sequence[tuple[int, int]], field: str = "ivr"
+) -> int:
+    for group_idx, (start, end) in enumerate(bins):
+        if start <= raw_ivr <= end:
+            return group_idx
+    raise ValueError(f"{field} fuera de los bins de agrupacion IVR: {raw_ivr}")
+
+
+def parse_class_labels_from_config(raw: Any) -> list[str]:
+    if raw is None:
+        return []
+    labels: list[str] = []
+    for item in raw:
+        labels.append(str(item))
+    return labels
+
+
+def label_for_index(idx: int, labels: Sequence[str]) -> str:
+    if 0 <= idx < len(labels):
+        return labels[idx]
+    return str(idx)
+
+
 class TestDataset(Dataset):
-    def __init__(self, csv_path: str, transform: transforms.Compose, target: str):
+    def __init__(
+        self,
+        csv_path: str,
+        transform: transforms.Compose,
+        target: str,
+        ivr_grouping_bins_raw: Optional[Sequence[tuple[int, int]]] = None,
+    ):
         self.transform = transform
         self.target = target
+        self.ivr_grouping_bins_raw = list(ivr_grouping_bins_raw or [])
         self.rows: list[tuple[str, str, int, int]] = []
         with open(csv_path, newline="", encoding="utf-8") as f:
             reader = csv.DictReader(f)
             for row in reader:
+                raw_ivr = parse_int_label(row["ivr"], "ivr")
+                ivr = (
+                    remap_raw_ivr_label(raw_ivr, self.ivr_grouping_bins_raw)
+                    if self.ivr_grouping_bins_raw
+                    else raw_ivr
+                )
                 self.rows.append(
                     (
                         row["photo_cod"],
                         row["image_path"],
                         parse_int_label(row["hpi"], "hpi"),
-                        parse_int_label(row["ivr"], "ivr"),
+                        ivr,
                     )
                 )
 
@@ -225,6 +270,7 @@ def save_predictions_csv(
     y_true: torch.Tensor,
     y_pred: torch.Tensor,
     target: str,
+    ivr_display_labels: Optional[Sequence[str]] = None,
 ) -> None:
     out_path.parent.mkdir(parents=True, exist_ok=True)
 
@@ -239,10 +285,14 @@ def save_predictions_csv(
             "pred_ivr",
             "abs_err_ivr",
         ]
+        if ivr_display_labels:
+            fieldnames.extend(["true_ivr_label", "pred_ivr_label"])
     elif target == "hpi":
         fieldnames = ["photo_cod", "image_path", "true_hpi", "pred_hpi", "abs_err_hpi"]
     else:
         fieldnames = ["photo_cod", "image_path", "true_ivr", "pred_ivr", "abs_err_ivr"]
+        if ivr_display_labels:
+            fieldnames.extend(["true_ivr_label", "pred_ivr_label"])
 
     with out_path.open("w", newline="", encoding="utf-8") as f:
         writer = csv.DictWriter(f, fieldnames=fieldnames)
@@ -264,13 +314,36 @@ def save_predictions_csv(
                 row["true_ivr"] = true_ivr
                 row["pred_ivr"] = pred_ivr
                 row["abs_err_ivr"] = abs(pred_ivr - true_ivr)
+                if ivr_display_labels:
+                    row["true_ivr_label"] = label_for_index(true_ivr, ivr_display_labels)
+                    row["pred_ivr_label"] = label_for_index(pred_ivr, ivr_display_labels)
             if target == "ivr":
                 true_ivr = int(y_true[i, 0].item())
                 pred_ivr = int(y_pred[i, 0].item())
                 row["true_ivr"] = true_ivr
                 row["pred_ivr"] = pred_ivr
                 row["abs_err_ivr"] = abs(pred_ivr - true_ivr)
+                if ivr_display_labels:
+                    row["true_ivr_label"] = label_for_index(true_ivr, ivr_display_labels)
+                    row["pred_ivr_label"] = label_for_index(pred_ivr, ivr_display_labels)
             writer.writerow(row)
+
+
+def save_heatmap_manifest_csv(path: Path, records: Sequence[dict[str, Any]]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    fieldnames = [
+        "photo_cod",
+        "task",
+        "image_path",
+        "output_path",
+        "pred_label",
+        "true_label",
+    ]
+    with path.open("w", newline="", encoding="utf-8") as f:
+        writer = csv.DictWriter(f, fieldnames=fieldnames)
+        writer.writeheader()
+        for record in records:
+            writer.writerow(record)
 
 
 def confusion_matrix_counts(
@@ -296,7 +369,7 @@ def confusion_matrix_counts(
 def plot_confusion_matrix(
     out_path: Path,
     cm: torch.Tensor,
-    labels: list[int],
+    labels: Sequence[str | int],
     title: str,
 ) -> None:
     import matplotlib.pyplot as plt
@@ -332,6 +405,7 @@ def save_plots(
     y_pred: torch.Tensor,
     target: str,
     class_limits: dict[str, tuple[int, int]],
+    class_display_labels: Optional[dict[str, list[str]]] = None,
 ) -> tuple[list[str], dict[str, Any]]:
     try:
         import matplotlib
@@ -362,7 +436,12 @@ def save_plots(
         min_label, max_label = class_limits[target_name]
         pred_vals = y_pred[:, idx].to(torch.int64).clamp(min=min_label, max=max_label)
 
-        labels = list(range(min_label, max_label + 1))
+        labels: list[str | int]
+        display_labels = (class_display_labels or {}).get(target_name, [])
+        if len(display_labels) == (max_label - min_label + 1):
+            labels = display_labels
+        else:
+            labels = list(range(min_label, max_label + 1))
         cm = confusion_matrix_counts(true_vals, pred_vals, min_label, max_label)
         out_name = f"5_confusion_{target_name}.png"
         plot_confusion_matrix(
@@ -373,7 +452,7 @@ def save_plots(
         )
         outputs.append(out_name)
         info[target_name] = {
-            "labels": labels,
+            "labels": [str(x) for x in labels],
             "min_label": min_label,
             "max_label": max_label,
             "pred_postprocess": "clipped_to_config_label_range",
@@ -381,6 +460,24 @@ def save_plots(
         }
 
     return outputs, info
+
+
+_HEATMAP_MODULE: Optional[Any] = None
+
+
+def load_heatmap_module() -> Any:
+    global _HEATMAP_MODULE
+    if _HEATMAP_MODULE is not None:
+        return _HEATMAP_MODULE
+
+    module_path = Path(__file__).with_name("11_heatmap_cnn.py")
+    spec = importlib.util.spec_from_file_location("heatmap_cnn_module", module_path)
+    if spec is None or spec.loader is None:
+        raise ImportError(f"No se pudo cargar el modulo de heatmaps: {module_path}")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    _HEATMAP_MODULE = module
+    return module
 
 
 def main() -> None:
@@ -408,6 +505,15 @@ def main() -> None:
     num_classes_ivr = int(config.get("num_classes_ivr", 0))
     if num_classes_hpi < 2 or num_classes_ivr < 2:
         raise ValueError("num_classes_hpi/num_classes_ivr invalidos en config.json")
+    ivr_label_mode = str(config.get("ivr_label_mode", "raw_8"))
+    ivr_grouping_bins_raw = parse_bins_from_config(config.get("ivr_grouping_bins_raw", []))
+    ivr_grouping_class_labels = parse_class_labels_from_config(
+        config.get("ivr_grouping_class_labels", [])
+    )
+    if ivr_label_mode != "raw_8" and not ivr_grouping_bins_raw:
+        raise ValueError(
+            "Run con IVR agrupado pero sin ivr_grouping_bins_raw en config."
+        )
     use_ivr_coarse_fine = bool(config.get("use_ivr_coarse_fine_effective", False))
     ivr_coarse_bins = parse_bins_from_config(config.get("ivr_coarse_bins_effective", []))
     if use_ivr_coarse_fine and not ivr_coarse_bins:
@@ -430,7 +536,12 @@ def main() -> None:
             transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
         ]
     )
-    test_ds = TestDataset(args.test_csv, test_tfms, target=target_name)
+    test_ds = TestDataset(
+        args.test_csv,
+        test_tfms,
+        target=target_name,
+        ivr_grouping_bins_raw=ivr_grouping_bins_raw,
+    )
     test_loader = DataLoader(
         test_ds,
         batch_size=args.batch_size,
@@ -527,10 +638,87 @@ def main() -> None:
         "hpi": (0, num_classes_hpi - 1),
         "ivr": (0, num_classes_ivr - 1),
     }
-    plot_files, confusion_info = save_plots(output_dir, y_true, y_pred, target=target_name, class_limits=class_limits)
+    class_display_labels: dict[str, list[str]] = {}
+    if ivr_grouping_class_labels:
+        class_display_labels["ivr"] = ivr_grouping_class_labels
+    plot_files, confusion_info = save_plots(
+        output_dir,
+        y_true,
+        y_pred,
+        target=target_name,
+        class_limits=class_limits,
+        class_display_labels=class_display_labels,
+    )
 
     predictions_path = output_dir / "predictions_test.csv"
-    save_predictions_csv(predictions_path, photo_codes, image_paths, y_true, y_pred, target=target_name)
+    save_predictions_csv(
+        predictions_path,
+        photo_codes,
+        image_paths,
+        y_true,
+        y_pred,
+        target=target_name,
+        ivr_display_labels=ivr_grouping_class_labels,
+    )
+
+    heatmap_records: list[dict[str, Any]] = []
+    heatmap_error = ""
+    heatmap_dir = output_dir / "heatmaps"
+    heatmap_manifest_path = output_dir / "heatmaps_manifest.csv"
+    heatmap_total = len(photo_codes)
+    heatmap_limit = args.heatmap_limit if args.heatmap_limit > 0 else heatmap_total
+
+    try:
+        heatmap_module = load_heatmap_module()
+        shutil.rmtree(heatmap_dir, ignore_errors=True)
+        heatmap_manifest_path.unlink(missing_ok=True)
+        for idx, (photo_code, image_path) in enumerate(zip(photo_codes, image_paths)):
+            if idx >= heatmap_limit:
+                break
+            true_hpi = None
+            true_ivr = None
+            pred_hpi = None
+            pred_ivr = None
+            if target_name == "both":
+                true_hpi = int(y_true[idx, 0].item())
+                true_ivr = int(y_true[idx, 1].item())
+                pred_hpi = int(y_pred[idx, 0].item())
+                pred_ivr = int(y_pred[idx, 1].item())
+            elif target_name == "hpi":
+                true_hpi = int(y_true[idx, 0].item())
+                pred_hpi = int(y_pred[idx, 0].item())
+            else:
+                true_ivr = int(y_true[idx, 0].item())
+                pred_ivr = int(y_pred[idx, 0].item())
+
+            heatmap_records.extend(
+                heatmap_module.save_prediction_heatmaps(
+                    model=model,
+                    model_name=model_name,
+                    image_path=image_path,
+                    photo_code=photo_code,
+                    target=target_name,
+                    img_size=img_size,
+                    device=device,
+                    output_dir=heatmap_dir,
+                    num_classes_hpi=num_classes_hpi,
+                    num_classes_ivr=num_classes_ivr,
+                    use_ivr_coarse_fine=use_ivr_coarse_fine,
+                    ivr_coarse_bins=ivr_coarse_bins,
+                    pred_hpi=pred_hpi,
+                    pred_ivr=pred_ivr,
+                    true_hpi=true_hpi,
+                    true_ivr=true_ivr,
+                )
+            )
+            if (idx + 1) % 50 == 0 or (idx + 1) == heatmap_limit:
+                print(f"Heatmaps: {idx + 1}/{heatmap_limit}")
+
+        if heatmap_records:
+            save_heatmap_manifest_csv(heatmap_manifest_path, heatmap_records)
+    except Exception as exc:
+        heatmap_error = str(exc)
+        print(f"Aviso: no se pudieron generar heatmaps ({exc})")
 
     metrics = {
         "run_dir": str(run_dir),
@@ -540,6 +728,9 @@ def main() -> None:
         "head_type": head_type,
         "num_classes_hpi": num_classes_hpi,
         "num_classes_ivr": num_classes_ivr,
+        "ivr_label_mode": ivr_label_mode,
+        "ivr_grouping_bins_raw": ivr_grouping_bins_raw,
+        "ivr_grouping_class_labels": ivr_grouping_class_labels,
         "use_ivr_coarse_fine_effective": use_ivr_coarse_fine,
         "ivr_coarse_bins_effective": ivr_coarse_bins,
         "n_test_samples": len(test_ds),
@@ -563,9 +754,20 @@ def main() -> None:
             "files": plot_files,
             "confusion_matrix": confusion_info,
         },
+        "6_heatmaps": {
+            "generated": len(heatmap_records) > 0 and heatmap_error == "",
+            "dir": "heatmaps",
+            "manifest_csv": "heatmaps_manifest.csv" if heatmap_records else "",
+            "records": len(heatmap_records),
+            "images_requested": heatmap_limit,
+            "images_total_test": heatmap_total,
+            "error": heatmap_error,
+        },
         "outputs": {
             "metrics_json": "metrics_test.json",
             "predictions_csv": "predictions_test.csv",
+            "heatmaps_dir": "heatmaps" if heatmap_records else "",
+            "heatmaps_manifest_csv": "heatmaps_manifest.csv" if heatmap_records else "",
         },
     }
 
@@ -607,6 +809,13 @@ def main() -> None:
         print(f"5) Plots (confusion matrix): {', '.join(plot_files)}")
     else:
         print("5) Plots: no generados (falta matplotlib).")
+    if heatmap_records and not heatmap_error:
+        print(
+            f"6) Heatmaps: {len(heatmap_records)} generados en {heatmap_dir} "
+            f"({heatmap_limit} imagenes)"
+        )
+    else:
+        print("6) Heatmaps: no generados" + (f" ({heatmap_error})" if heatmap_error else ""))
 
 
 if __name__ == "__main__":

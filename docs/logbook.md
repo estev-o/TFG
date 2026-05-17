@@ -155,6 +155,7 @@ Comparativa breve en test (baseline regresión vs ordinal):
 3. Ordinal `ivr`: `mae_ivr=1.9656` (prácticamente igual al baseline en IVR).
 4. Ordinal `both`: `mae_hpi=0.5630`, `mae_ivr=1.8653`, `mae_mean=1.2142` (mejor resultado global).
 Conclusión: para esta fase, la opción recomendada es `clas_ordinal_both_convnext_tiny_e30`.
+
 2026-03-27
 Ajuste de entrenamiento en `both`: se añade ponderación explícita de pérdidas para priorizar IVR (`w_hpi=0.4`, `w_ivr=0.6`, normalizado), además añadimos early stopping. El resultado no es muco más distinto, hay menos error grande en IVR (RMSE), pero no es un cambio muy relevante
 2026-04-16
@@ -225,3 +226,42 @@ Tras varias iteraciones de ajuste fino (weights, losses auxiliares y variantes C
    - Nueva opción `--use-ivr-coarse-fine` con bins configurables (`--ivr-coarse-bins`, por defecto `0-2,3-5,6-7`).
    - Se añade una loss coarse auxiliar de IVR (`--ivr-coarse-loss-weight`) y una decodificación jerárquica en inferencia (primero bin coarse, luego clase fina dentro del bin).
 3. Objetivo esperado: reducir fallos lejanos tipo `0->7` / `7->0` en IVR, mejorando especialmente `mae_ivr` y el acierto dentro de ±1/±2.
+
+2026-05-10
+Después de una reunión con Penedo, se volvieron claros varios aspectos:
+1. Hay que recuperar el baseline, que eliminé la run buena
+2.Usar los heatmaps para ver en que se fija en las imágenes problemáticas del IVR
+3. Posible solución -> Igualar clases a la hora de entrenar
+4. Posible solución -> Agrupar por grupos menos representados. Osea cambiar clases de IVR a 01,23,45,67 o algo así
+
+
+2026-05-17
+- Recuperada el baseline (run 9)
+- Pasado un test con heatmaps a la run 9
+- **Experimento para tratar de justificar los extremos:**
+
+IVR REAL VS PREDICHO, COMENTARIO
+VI1515 ->7 1, parece que se fija en un extremo, no hay errores aparentes
+GI530 -> 0 6, no se fija en las mordidas sino que se fija en la parte de tallo y tal
+GI601 -> 0 7, se fija en las mordidas muy bien
+VI2303 -> 0 7, se fija super bien, no entiendo muy bien el error
+VI747 -> 0 7, igual, hay mordidas bastante claras no sé porque está marcado como 0
+VI1482 -> 7 1, aquí el fallo está bastante claro, se fija en el tallo y no las mordidas
+VI521 -> 0 7, igual, se fija en la mordida pero la nota no coresponde
+VI4322 -> 7 0, se fija en tallo no en mordida
+
+
+
+
+
+CONCLUSIÓN, POR QUÉ DA BAJO CUANDO ES ALTO? Hipótesis: Lo que es común en todas esas (aunque no te lo pongo) es que el HPI es bajo, puede ser que le cueste más decidir al tener un HPI bajo.
+
+
+
+CONCLUSIÓN, POR QUÉ DA ALTO CUANDO ES BAJO: Aquí está más claro, yo creo que es porque se fija en el tallo, no en la mordida en si
+
+
+- Cambiamos para experimentar otra visión distinta, vamos agrupar clases para tratar de solucionarlo. Agrupamos las clases de este modo:
+01,23,45,67.
+
+Vamos a implementar 12_train

@@ -1,4 +1,4 @@
-.PHONY: help clean run1 run1_debug run2 run2_debug run2_all run2_debug_individual run3 train_yolo apply_yolo normalize_out cnn_prepare cnn_train cnn_smoke cnn_test cnn_train_hpi cnn_train_ivr cnn_train_both cnn_train_both_highres
+.PHONY: help clean run1 run1_debug run2 run2_debug run2_all run2_debug_individual run3 train_yolo apply_yolo normalize_out cnn_prepare cnn_train cnn_smoke cnn_test cnn_train_hpi cnn_train_ivr cnn_train_both cnn_train_both_highres cnn_train_ivr_grouped
 
 # Variables
 VENV = .venv
@@ -11,6 +11,7 @@ SCRIPT_APPLY = scripts/06_aplicar_yolo.py
 SCRIPT_NORM = scripts/07_normalizar_recortes.py
 SCRIPT_CNN_PREPARE = cnn/08_build_split_manifest.py
 SCRIPT_CNN_TRAIN = cnn/09_train_ordinal.py
+SCRIPT_CNN_TRAIN_IVR_GROUPED = cnn/12_train_ordinal_ivr_grouped.py
 SCRIPT_CNN_TEST = cnn/10_test_cnn.py
 OUTPUT_DIR = out
 N ?= 10
@@ -197,3 +198,8 @@ cnn_train_both: ## Nuevo flujo: ConvNeXt-Tiny para [HPI, IVR]
 
 cnn_train_both_highres: ## ConvNeXt-Tiny both a alta resolucion (img=384 por defecto)
 	@$(MAKE) cnn_train CNN_MODEL=convnext_tiny CNN_TARGET=both CNN_PRETRAINED=1 CNN_IMG=$(CNN_HIGHRES_IMG) CNN_BATCH=$(CNN_HIGHRES_BATCH) CNN_RUN_DIR=cnn/runs/highres_convnext_tiny_both_i$(CNN_HIGHRES_IMG)_e$(CNN_EPOCHS)
+
+cnn_train_ivr_grouped: ## Entrena la variante ordinal con IVR agrupado 01/23/45/67
+	@echo "$(BLUE)Entrenando CNN agrupando IVR en 01/23/45/67$(NC)"
+	$(PYTHON) $(SCRIPT_CNN_TRAIN_IVR_GROUPED) --train-csv $(CNN_TRAIN_CSV) --val-csv $(CNN_VAL_CSV) --out-dir $(CNN_RUN_DIR) --model $(CNN_MODEL) --target $(CNN_TARGET) --img-size $(CNN_IMG) --epochs $(CNN_EPOCHS) --batch-size $(CNN_BATCH) --lr $(CNN_LR) --weight-decay $(CNN_WD) --loss $(CNN_LOSS) --both-loss-weight-hpi $(CNN_BOTH_W_HPI) --both-loss-weight-ivr $(CNN_BOTH_W_IVR) $(if $(filter 1 true TRUE yes YES,$(CNN_USE_IVR_COARSE_FINE)),--use-ivr-coarse-fine,) --ivr-coarse-bins "$(CNN_IVR_COARSE_BINS)" --ivr-coarse-loss-weight $(CNN_IVR_COARSE_LOSS_WEIGHT) --huber-delta $(CNN_HUBER_DELTA) --workers $(CNN_WORKERS) --seed $(CNN_SEED) --device $(CNN_DEVICE) --max-train-samples $(CNN_MAX_TRAIN) --max-val-samples $(CNN_MAX_VAL) --early-stopping-patience $(CNN_ES_PATIENCE) --early-stopping-min-delta $(CNN_ES_MIN_DELTA) $(if $(filter 1 true TRUE yes YES,$(CNN_PRETRAINED)),--pretrained,) $(if $(filter 1 true TRUE yes YES,$(CNN_AMP)),--amp,)
+	@echo "$(GREEN)Entrenamiento CNN agrupado finalizado. Salida: $(CNN_RUN_DIR)$(NC)"
