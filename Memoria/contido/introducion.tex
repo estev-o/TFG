@@ -1,18 +1,59 @@
 \chapter{Introdución}
 \label{chap:introducion}
 
-\lettrine{P}{rimer} capítulo da memoria, onde xeralmente se exporán as
-liñas mestras do traballo, os obxectivos, etc. Incluimos un par de
-exemplos de citas~\cite{ErlangBook,ErlangWebBook} e de referencias
-internas (sección \ref{sec:mostra}, páxina \pageref{sec:mostra}).
+\lettrine{N}{esta} introdución contextualízase o traballo realizado mediante a presentación do
+problema abordado, dos obxectivos perseguidos e da metodoloxía xeral empregada. O propósito deste
+capítulo é ofrecer unha visión global do proxecto e establecer as bases dos capítulos seguintes,
+nos que se detallarán os aspectos técnicos e os resultados obtidos.
 
-\Blindtext
+\section{Contextualización e xustificación}
+Comprender e cuantificar os danos causados ás algas mariñas constitúe un paso esencial para a
+investigación e a conservación dos ecosistemas submariños. A análise deste tipo de danos permite
+avaliar o estado das propias algas e, ao mesmo tempo, obter información indirecta sobre a presión de
+depredación herbívora e sobre o comportamento alimentario das especies que interactúan con elas.
+Neste ámbito, especialistas en disciplinas como a bioloxía mariña deben examinar as mostras e
+determinar tanto a intensidade do dano observado como a súa natureza ou posible orixe.
 
-\section{Sección de mostra}
-\label{sec:mostra}
+Este labor realízase habitualmente de maneira manual, o que o converte nun proceso custoso en
+tempo e esixente desde o punto de vista técnico. O elevado volume de imaxes dispoñibles, xunto coa
+minuciosidade necesaria para efectuar unha valoración precisa, dificulta a análise eficiente dos
+datos. Ademais, a estimación do nivel de dano e a identificación do axente causante introducen un
+compoñente de subxectividade, especialmente nos casos intermedios, nos que unha mesma mostra pode
+recibir valoracións diferentes segundo o criterio da persoa experta que a examine.
 
-\Blindtext
+Por outra banda, a documentación histórica xerada polos propios expertos, composta por rexistros
+de táboas e por material fotográfico, ofrece unha base de información valiosa para abordar a
+automatización deste procedemento. Neste escenario, a visión por computador e a aprendizaxe profunda
+preséntanse como ferramentas axeitadas para desenvolver un sistema de apoio á decisión capaz de
+asistir na avaliación do dano. A proposta deste traballo inscríbese precisamente nesta liña, mediante
+o deseño dun pipeline orientado á análise de imaxes reais e á xeración de estimacións útiles como
+soporte ao labor experto.
 
-\subsection{Subsección de mostra}
+\section{Achegamento do problema}
+O problema que se aborda, tal e como se estableceu na contextualización, consiste en implementar
+unha solución que asista os expertos en bioloxía na cuantificación e clasificación de danos en
+algas laminarias. Para iso, dispoñemos dun \textit{dataset} cedido polo \textcolor{red}{\textbf{TODO: Introducir o nome do departamento específico que cedeu as fotos.}},
+no que se recollen fotografías que, aínda que comparten certos elementos comúns, como un plano
+cenital e un fondo semellante (mesa branca), non foron obtidas baixo un procedemento de captura
+completamente estandarizado. Existen imaxes que exceden os límites da mesa e deixan ver o fondo,
+aparecen sombras derivadas dunha iluminación non controlada e a propia superficie de captura non é
+uniformemente branca sempre, xa que presenta unha franxa escura producida pola separación entre mesas.
+Ademais, nas imaxes inclúense unha regra empregada como referencia de escala e identificadores
+numéricos asociados á captura.
 
-\Blindtext
+Todo isto fai necesaria a división do sistema en varias etapas. En primeiro lugar, precísase un
+preprocesado das imaxes que permita estandarizar, na medida do posible, o \textit{dataset} e
+reducir a influencia de variacións alleas ao fenómeno de interese, que poderían afectar ao
+comportamento da \gls{cnn}. En segundo lugar, emprégase a propia \gls{cnn} para realizar a
+inferencia sobre as imaxes tomadas polos expertos e determinar tanto o nivel de dano da alga como a
+orixe da depredación. De aquí en adiante, referirémonos a estes valores como \gls{hpi} e
+\gls{ivr}, respectivamente. Esta é a nomenclatura empregada polos biólogos no \textit{dataset}
+proporcionado.
+
+Finalmente, resulta necesario deseñar unha \textit{pipeline} que encapsule estes procesos e
+simplifique o uso do sistema por parte dos expertos. Deste xeito, os biólogos unicamente terán que
+incorporar unha imaxe ao programa, que lles devolverá a inferencia da \gls{cnn} como apoio á súa
+toma de decisións.
+ 
+\section{Obxectivos}
+\section{Estrutura do traballo}

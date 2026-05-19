@@ -41,5 +41,17 @@ Thumbs.db
 #Openvpn
 *.ovpn
 
+*.aux
+*.acn
+*.bbl
+*.out
+*.log
+*.glo
+*.ist
+*.lof
+*.lot
+*.gz
+*.toc
+
 # runs de cnn   
 /cnn/runs/
