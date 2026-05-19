@@ -264,4 +264,12 @@ CONCLUSIÓN, POR QUÉ DA ALTO CUANDO ES BAJO: Aquí está más claro, yo creo qu
 - Cambiamos para experimentar otra visión distinta, vamos agrupar clases para tratar de solucionarlo. Agrupamos las clases de este modo:
 01,23,45,67.
 
-Vamos a implementar 12_train
+Vamos a implementar 12_train_ordinal_ivr_grouped y veremos si mejora:
+
+2026-05-17 (parte 2)
+Comparativa de la run agrupada `13_ivr_grouped_convnext_tiny_es` frente al baseline recuperado `9_weighted_0307_cnvnxt_es`:
+1. En bruto parece una mejora grande en IVR (`mae_ivr=0.8238`), pero no es comparable directamente con el baseline (`1.8324`) porque ahora IVR tiene 4 clases agrupadas (`01/23/45/67`) en vez de 8.
+2. Al normalizar por el rango ordinal, la comparación ya no favorece a la run agrupada: baseline `1.8324/7 = 0.2618` frente a agrupada `0.8238/3 = 0.2746`, o sea ligeramente peor.
+3. Comparación más justa todavía: si colapsamos las predicciones del baseline `9` al mismo esquema agrupado `01/23/45/67`, el baseline sigue quedando algo mejor en IVR agrupado (`mae=0.8009` vs `0.8238`, `acc_exact=0.6533` vs `0.6089`).
+4. Sí hay un cambio de comportamiento: la run agrupada reduce parte del error `01 -> 67` (de `90` a `44` casos), pero empeora mucho el inverso `67 -> 01` (de `42` a `81`), así que el problema de extremos en IVR sigue presente.
+5. Conclusión: agrupar IVR cambia la distribución de errores, pero por ahora no resuelve el problema y no mejora de forma robusta al baseline `9`.
