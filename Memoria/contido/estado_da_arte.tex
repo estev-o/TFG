@@ -1,0 +1,114 @@
+\chapter{Estado da arte}
+\label{chap:estado-da-arte}
+
+Este capítulo recolle o marco teórico e os antecedentes necesarios para contextualizar a solución
+proposta neste traballo. En particular, revísanse os conceptos e técnicas máis relevantes
+relacionados coa visión por computador, a aprendizaxe profunda aplicada á análise de imaxes e os
+enfoques existentes para a avaliación automatizada do dano en organismos.
+
+\section{Visión por computador aplicada á análise de imaxes biolóxicas}
+Nos últimos anos, a visión por computador consolidouse como unha ferramenta de grande utilidade na
+análise automática de imaxes biolóxicas, ao permitir a extracción de información cuantitativa a partir
+de rexistros visuais de maneira máis rápida, reproducible e escalable ca a inspección manual. Este
+tipo de técnicas resultan especialmente valiosas en contextos nos que o volume de datos é elevado ou
+nos que a avaliación visual require coñecemento experto, como sucede en tarefas de seguimento
+morfolóxico, clasificación de mostras ou detección de anomalías.
+
+No ámbito acuático e mariño, esta tendencia tamén se fixo patente. O traballo de Kumar et
+al.~\cite{articuloBiomedical} revisa avances recentes na análise de bioimaxes aplicadas á detección de
+deformidades esqueléticas en peixes de acuicultura e en especies empregadas en investigación
+biomédica, mostrando como a intelixencia artificial e os métodos modernos de análise de imaxe poden
+automatizar procesos tradicionalmente manuais. Aínda que o foco dese estudo non está nas algas nin na
+avaliación de dano por herbivoría, si evidencia unha tendencia xeral: a incorporación de técnicas de
+visión por computador en problemas biolóxicos permite mellorar a consistencia da análise e ampliar a
+capacidade de procesamento en escenarios con datos reais e heteroxéneos.
+
+\section{Aprendizaxe profunda para detección e clasificación}
+Dentro deste contexto, a aprendizaxe profunda adquiriu un papel central na análise de imaxes debido á
+súa capacidade para aprender representacións complexas directamente a partir dos datos. En
+particular, as redes neuronais convolucionais constitúen unha das arquitecturas máis empregadas en
+tarefas de clasificación visual, xa que permiten extraer patróns espaciais xerárquicos e adaptarse con
+boa eficacia a problemas nos que a aparencia, a textura ou a forma resultan determinantes.
+
+No caso da detección de obxectos, a familia de modelos YOLO converteuse nunha das referencias máis
+influintes do campo. A revisión de Ramos e Sappa~\cite{articuloYOLO} analiza unha década de evolución
+de YOLO, desde as primeiras versións ata arquitecturas máis recentes, e destaca como trazos
+característicos a súa eficiencia, a súa escalabilidade modular e a súa capacidade de adaptación a
+dominios diversos. Esta combinación de rapidez e precisión explica a súa ampla adopción en aplicacións
+de tempo real e en contornas nas que é necesario localizar automaticamente elementos de interese
+dentro da imaxe.
+
+Para o presente traballo, este tipo de modelos resulta especialmente relevante porque a avaliación do
+dano non se realiza sobre unha rexión perfectamente recortada e estandarizada, senón sobre imaxes nas
+que primeiro é preciso identificar a zona correspondente á alga. Neste sentido, a utilización dun
+detector baseado en YOLO encaixa de maneira natural como primeira etapa do pipeline, ao permitir
+localizar o obxecto de interese antes de proceder á súa análise posterior.
+
+\section{Regresión ordinal e estimación do dano}
+En problemas nos que a variable obxectivo representa niveis ordenados, a formulación mediante
+regresión ordinal resulta máis axeitada que unha clasificación multiclase convencional, xa que ten en
+conta a relación de orde existente entre as etiquetas. No contexto deste traballo, esta característica
+é especialmente relevante, dado que o dano observado sobre as algas non se interpreta como un
+conxunto arbitrario de clases independentes, senón como unha progresión de intensidade.
+
+Por este motivo, o uso de enfoques específicos de regresión ordinal permite modelar de maneira máis
+fiel a estrutura do problema e reducir erros conceptualmente máis graves, como tratar do mesmo xeito
+unha confusión entre niveis próximos e outra entre niveis afastados. Entre estes enfoques, CORAL-CNN
+constitúe unha alternativa especialmente interesante pola súa capacidade para manter consistencia entre
+as predicións binarias que compoñen a saída ordinal.
+\subsection{Regresión ordinal (CORAL-CNN)}
+No traballo de Cao et al.~\cite{articuloCoral} formúlase a regresión ordinal como un problema no
+que as etiquetas non son simplemente categorías independentes, senón valores cunha orde relativa que
+debe ser tida en conta polo modelo. Os autores sinalan que os enfoques baseados en descompoñer esta
+tarefa en múltiples subtarefas de clasificación binaria poden producir inconsistencias entre
+predicións, o que resulta especialmente problemático cando se pretende estimar unha magnitude
+ordenada.
+
+Como resposta a esta limitación, proponse \gls{coral}, un \textit{framework} de regresión ordinal
+para redes neuronais que garante consistencia no ranking e puntuacións de confianza monotónicas entre
+as distintas subtarefas. Ademais, o artigo destaca que se trata dun método independente da
+arquitectura empregada, polo que pode adaptarse a modelos convolucionais comúns sen modificar a súa
+estrutura base. A avaliación experimental realizada polos autores no contexto da estimación de idade
+mostra unha redución do erro respecto de enfoques ordinais previos, o que reforza a súa utilidade en
+problemas nos que a orde entre etiquetas é un aspecto esencial.
+
+
+\section{Traballos relacionados}
+Os traballos previos máis próximos ao presente TFG poden agruparse en dúas liñas principais. Por unha
+banda, atópanse os estudos que empregan aprendizaxe profunda para resolver problemas de regresión
+ordinal en imaxes. Niu et al.~\cite{articuloRegresionOrdinal} propuxeron un enfoque 
+baseado nunha CNN con múltiples saídas para transformar a estimación da idade nun conxunto de
+subtarefas binarias correlacionadas, demostrando que a extracción de características e o modelado da
+orde poden aprenderse de forma conxunta. Sobre esta base, Cao et al.~\cite{articuloCoral}
+formularon CORAL como unha mellora orientada a garantir consistencia entre as saídas ordinais,
+reforzando así a adecuación deste tipo de métodos para variables organizadas en niveis ordenados.
+
+Por outra banda, existen traballos centrados na automatización da detección e da cuantificación da
+severidade en imaxes biolóxicas. O estudo de Sundar et al.~\cite{articuloPlantDisease} presenta un
+sistema para a detección de enfermidades en plantas e a estimación da súa severidade mediante unha
+combinación de clasificación con redes convolucionais e análise posterior da área afectada. Aínda que
+o dominio de aplicación é diferente, este enfoque resulta relevante porque comparte unha motivación moi
+próxima á deste TFG: reducir a subxectividade da avaliación visual experta e proporcionar medidas máis
+obxectivas e reproducibles do dano observado.
+
+En conxunto, estes antecedentes mostran que xa existen ferramentas eficaces tanto para a localización
+de obxectos en imaxes como para a estimación de variables ordenadas ou de severidade en problemas
+biolóxicos. Con todo, a aplicación destas técnicas ao caso concreto da avaliación de mordeduras en
+algas laminarias segue sendo un problema sen explorar, especialmente cando se traballa con imaxes
+non estandarizadas e cunha formulación que require combinar detección, preprocesado e estimación
+ordinal nun mesmo fluxo.
+
+\section{Síntese do capítulo}
+O estado da arte revisado pon de manifesto que a visión por computador e a aprendizaxe profunda
+ofrecen unha base sólida para abordar problemas de análise automatizada de imaxes biolóxicas. Os
+modelos de detección, e en particular a familia YOLO, proporcionan mecanismos eficaces para localizar
+obxectos de interese en contornas complexas, mentres que os enfoques de regresión ordinal permiten
+modelar adecuadamente variables que representan niveis de severidade ou intensidade.
+
+Tamén se observa que boa parte dos traballos previos se centran en dominios diferentes, como a
+estimación da idade facial, a análise biomédica de peixes ou a detección de enfermidades en plantas.
+Isto implica que, malia existir antecedentes metodolóxicos relevantes, segue habendo un espazo claro
+para adaptar e integrar estas técnicas no contexto específico da avaliación de danos en algas
+laminarias. A proposta desenvolvida neste traballo sitúase precisamente nese punto, ao combinar
+detección, preprocesado e estimación ordinal para construír un sistema orientado ao apoio da análise
+experta sobre datos reais.

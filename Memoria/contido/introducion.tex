@@ -41,6 +41,17 @@ uniformemente branca sempre, xa que presenta unha franxa escura producida pola s
 Ademais, nas imaxes inclúense unha regra empregada como referencia de escala e identificadores
 numéricos asociados á captura.
 
+\begin{figure}[htbp]
+    \centering
+    \includegraphics[width=0.32\textwidth]{imaxes/Alga_exemplo_intro_1.JPEG}
+    \hfill
+    \includegraphics[width=0.32\textwidth]{imaxes/Alga_exemplo_intro_2.JPEG}
+    \hfill
+    \includegraphics[width=0.32\textwidth]{imaxes/Alga_exemplo_intro_3.JPG}
+    \caption{Exemplos variados de imaxes do \textit{dataset} empregado.}
+    \label{fig:irregularidades-dataset}
+\end{figure}
+
 Todo isto fai necesaria a división do sistema en varias etapas. En primeiro lugar, precísase un
 preprocesado das imaxes que permita estandarizar, na medida do posible, o \textit{dataset} e
 reducir a influencia de variacións alleas ao fenómeno de interese, que poderían afectar ao
@@ -56,4 +67,22 @@ incorporar unha imaxe ao programa, que lles devolverá a inferencia da \gls{cnn}
 toma de decisións.
  
 \section{Obxectivos}
+
+\subsection{Obxectivo xeral}
+De forma global, este traballo pretende desenvolver un programa informático que poida asistir aos biólogos 
+na clasificación e cuantificación de danos causados a algas Laminarias, buscando un sistema que priorice 
+a exactitude na inferencia e a facilidade de uso.
+
+\subsection{Obxectivos específicos}
+
+\begin{itemize}
+    \item Analizar e preparar o conxunto de datos dispoñibles para o problema.
+    \item Deseñar unha etapa de preprocesado que reduza a variabilidade e normalice as imaxes atopadas no conxunto de datos.
+    \item Desenvolver un modelo que proporcione unha inferencia para estimar as variables das algas (\gls{hpi}, \gls{ivr}).
+    \item Integración do sistema nunha ferramenta usable polos expertos.
+    \item Avaliar o comportamento do sistema con datos reais.
+\end{itemize}
+
+
 \section{Estrutura do traballo}
+\textcolor{red}{\textbf{TODO: Describir a estrutura final da memoria cando os capítulos estean pechados.}}

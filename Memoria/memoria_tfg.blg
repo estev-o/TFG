@@ -1,0 +1,69 @@
+This is BibTeX, Version 0.99d (TeX Live 2023/Debian)
+Capacity: max_strings=200000, hash_size=200000, hash_prime=170003
+The top-level auxiliary file: memoria_tfg.aux
+A level-1 auxiliary file: portada/portada.aux
+A level-1 auxiliary file: portada/resumo.aux
+A level-1 auxiliary file: contido/introducion.aux
+A level-1 auxiliary file: contido/estado_da_arte.aux
+A level-1 auxiliary file: contido/demo.aux
+A level-1 auxiliary file: contido/conclusions.aux
+A level-1 auxiliary file: anexos/adicional.aux
+The style file: IEEEtranN.bst
+Reallocated singl_function (elt_size=4) to 100 items from 50.
+Reallocated singl_function (elt_size=4) to 100 items from 50.
+Reallocated singl_function (elt_size=4) to 100 items from 50.
+Reallocated wiz_functions (elt_size=4) to 6000 items from 3000.
+Reallocated singl_function (elt_size=4) to 100 items from 50.
+Database file #1: bibliografia/bibconf-gl.bib
+Database file #2: bibliografia/bibliografia.bib
+-- IEEEtranN.bst version 1.14 (2015/08/26) by Michael Shell.
+-- http://www.michaelshell.org/tex/ieeetran/bibtex/
+-- See the "IEEEtran_bst_HOWTO.pdf" manual for usage information.
+** Natbib version - not for normal IEEE work.
+Reallocated glb_str_ptr (elt_size=4) to 20 items from 10.
+Reallocated global_strs (elt_size=200001) to 20 items from 10.
+Reallocated glb_str_end (elt_size=4) to 20 items from 10.
+** IEEEtran BST control entry "IEEEexample:BSTcontrol" detected.
+
+Done.
+You've used 6 entries,
+            4855 wiz_defined-function locations,
+            993 strings with 9788 characters,
+and the built_in function-call counts, 5026 in all, are:
+= -- 426
+> -- 143
+< -- 37
++ -- 80
+- -- 36
+* -- 302
+:= -- 751
+add.period$ -- 10
+call.type$ -- 6
+change.case$ -- 10
+chr.to.int$ -- 92
+cite$ -- 6
+duplicate$ -- 311
+empty$ -- 364
+format.name$ -- 41
+if$ -- 1124
+int.to.chr$ -- 1
+int.to.str$ -- 7
+missing$ -- 46
+newline$ -- 43
+num.names$ -- 15
+pop$ -- 116
+preamble$ -- 1
+purify$ -- 5
+quote$ -- 4
+skip$ -- 375
+stack$ -- 0
+substring$ -- 236
+swap$ -- 238
+text.length$ -- 6
+text.prefix$ -- 0
+top$ -- 7
+type$ -- 83
+warning$ -- 0
+while$ -- 19
+width$ -- 0
+write$ -- 85

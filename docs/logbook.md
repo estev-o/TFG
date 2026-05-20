@@ -273,3 +273,5 @@ Comparativa de la run agrupada `13_ivr_grouped_convnext_tiny_es` frente al basel
 3. Comparación más justa todavía: si colapsamos las predicciones del baseline `9` al mismo esquema agrupado `01/23/45/67`, el baseline sigue quedando algo mejor en IVR agrupado (`mae=0.8009` vs `0.8238`, `acc_exact=0.6533` vs `0.6089`).
 4. Sí hay un cambio de comportamiento: la run agrupada reduce parte del error `01 -> 67` (de `90` a `44` casos), pero empeora mucho el inverso `67 -> 01` (de `42` a `81`), así que el problema de extremos en IVR sigue presente.
 5. Conclusión: agrupar IVR cambia la distribución de errores, pero por ahora no resuelve el problema y no mejora de forma robusta al baseline `9`.
+
+
