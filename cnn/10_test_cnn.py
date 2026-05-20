@@ -44,7 +44,7 @@ def parse_args() -> argparse.Namespace:
         "--heatmap-limit",
         type=int,
         default=0,
-        help="Numero maximo de imagenes para generar heatmaps (0 = todas).",
+        help="Numero maximo de imagenes para generar heatmaps (0 = ninguno).",
     )
     return parser.parse_args()
 
@@ -150,7 +150,37 @@ class TestDataset(Dataset):
         return x, y, photo_cod, image_path
 
 
-def output_dim_for_target(target: str, num_classes_hpi: int, num_classes_ivr: int) -> int:
+def parse_ivr_score_targets(raw: Any) -> dict[int, float]:
+    if raw is None:
+        return {}
+    if isinstance(raw, dict):
+        out: dict[int, float] = {}
+        for k, v in raw.items():
+            if v is None:
+                continue
+            out[int(k)] = float(v)
+        return out
+    if isinstance(raw, list):
+        out = {}
+        for idx, value in enumerate(raw):
+            if value is None:
+                continue
+            out[idx] = float(value)
+        return out
+    raise ValueError(f"ivr_score_targets invalido en config: {raw}")
+
+
+def output_dim_for_head_type(
+    head_type: str, target: str, num_classes_hpi: int, num_classes_ivr: int
+) -> int:
+    if head_type == "hpi_coral_ivr_score":
+        if target == "both":
+            return num_classes_hpi
+        if target == "hpi":
+            return num_classes_hpi - 1
+        raise ValueError(
+            "La variante hpi_coral_ivr_score no soporta target=ivr en evaluacion."
+        )
     if target == "both":
         return (num_classes_hpi - 1) + (num_classes_ivr - 1)
     if target == "hpi":
@@ -238,14 +268,65 @@ def parse_bins_from_config(raw: Any) -> list[tuple[int, int]]:
     return bins
 
 
+def decode_ivr_score_to_class(
+    scores: torch.Tensor,
+    ivr_score_targets: dict[int, float],
+    hpi_pred: Optional[torch.Tensor] = None,
+    use_hpi_gate: bool = True,
+) -> torch.Tensor:
+    anchor_classes_raw = sorted(k for k in ivr_score_targets.keys() if k > 0)
+    if not anchor_classes_raw:
+        raise ValueError("No hay anchors de ivr_score_targets para decodificar IVR score.")
+
+    anchor_classes = torch.tensor(
+        anchor_classes_raw,
+        device=scores.device,
+        dtype=torch.int64,
+    )
+    anchor_scores = torch.tensor(
+        [ivr_score_targets[k] for k in anchor_classes_raw],
+        device=scores.device,
+        dtype=scores.dtype,
+    )
+    pred = torch.zeros(scores.shape[0], device=scores.device, dtype=torch.int64)
+    valid_mask = torch.ones(scores.shape[0], device=scores.device, dtype=torch.bool)
+    if use_hpi_gate and hpi_pred is not None:
+        valid_mask = hpi_pred > 0
+    if valid_mask.any():
+        distances = (scores[valid_mask].unsqueeze(1) - anchor_scores.unsqueeze(0)).abs()
+        idx = distances.argmin(dim=1)
+        pred[valid_mask] = anchor_classes[idx]
+    return pred
+
+
 def decode_predictions(
     logits: torch.Tensor,
+    head_type: str,
     target: str,
     num_classes_hpi: int,
     num_classes_ivr: int,
     use_ivr_coarse_fine: bool = False,
     ivr_coarse_bins: Optional[Sequence[tuple[int, int]]] = None,
+    ivr_score_targets: Optional[dict[int, float]] = None,
+    ivr_score_hpi_gate: bool = True,
 ) -> torch.Tensor:
+    if head_type == "hpi_coral_ivr_score":
+        if target == "both":
+            hpi_dim = num_classes_hpi - 1
+            pred_hpi = decode_ordinal_logits(logits[:, :hpi_dim])
+            ivr_scores = torch.sigmoid(logits[:, hpi_dim])
+            pred_ivr = decode_ivr_score_to_class(
+                ivr_scores,
+                ivr_score_targets or {},
+                hpi_pred=pred_hpi,
+                use_hpi_gate=ivr_score_hpi_gate,
+            )
+            return torch.stack([pred_hpi, pred_ivr], dim=1).to(torch.int64)
+        if target == "hpi":
+            pred = decode_ordinal_logits(logits)
+            return pred.unsqueeze(1).to(torch.int64)
+        raise ValueError("head_type hpi_coral_ivr_score no soporta target=ivr.")
+
     if target == "both":
         hpi_dim = num_classes_hpi - 1
         pred_hpi = decode_ordinal_logits(logits[:, :hpi_dim])
@@ -263,6 +344,20 @@ def decode_predictions(
     return pred.unsqueeze(1).to(torch.int64)
 
 
+def extract_pred_ivr_scores(
+    logits: torch.Tensor,
+    head_type: str,
+    target: str,
+    num_classes_hpi: int,
+) -> Optional[torch.Tensor]:
+    if head_type != "hpi_coral_ivr_score":
+        return None
+    if target != "both":
+        return None
+    hpi_dim = num_classes_hpi - 1
+    return torch.sigmoid(logits[:, hpi_dim]).to(torch.float32)
+
+
 def save_predictions_csv(
     out_path: Path,
     photo_codes: list[str],
@@ -271,6 +366,7 @@ def save_predictions_csv(
     y_pred: torch.Tensor,
     target: str,
     ivr_display_labels: Optional[Sequence[str]] = None,
+    pred_ivr_scores: Optional[Sequence[float]] = None,
 ) -> None:
     out_path.parent.mkdir(parents=True, exist_ok=True)
 
@@ -285,12 +381,16 @@ def save_predictions_csv(
             "pred_ivr",
             "abs_err_ivr",
         ]
+        if pred_ivr_scores is not None:
+            fieldnames.append("pred_ivr_score")
         if ivr_display_labels:
             fieldnames.extend(["true_ivr_label", "pred_ivr_label"])
     elif target == "hpi":
         fieldnames = ["photo_cod", "image_path", "true_hpi", "pred_hpi", "abs_err_hpi"]
     else:
         fieldnames = ["photo_cod", "image_path", "true_ivr", "pred_ivr", "abs_err_ivr"]
+        if pred_ivr_scores is not None:
+            fieldnames.append("pred_ivr_score")
         if ivr_display_labels:
             fieldnames.extend(["true_ivr_label", "pred_ivr_label"])
 
@@ -314,6 +414,8 @@ def save_predictions_csv(
                 row["true_ivr"] = true_ivr
                 row["pred_ivr"] = pred_ivr
                 row["abs_err_ivr"] = abs(pred_ivr - true_ivr)
+                if pred_ivr_scores is not None:
+                    row["pred_ivr_score"] = float(pred_ivr_scores[i])
                 if ivr_display_labels:
                     row["true_ivr_label"] = label_for_index(true_ivr, ivr_display_labels)
                     row["pred_ivr_label"] = label_for_index(pred_ivr, ivr_display_labels)
@@ -323,6 +425,8 @@ def save_predictions_csv(
                 row["true_ivr"] = true_ivr
                 row["pred_ivr"] = pred_ivr
                 row["abs_err_ivr"] = abs(pred_ivr - true_ivr)
+                if pred_ivr_scores is not None:
+                    row["pred_ivr_score"] = float(pred_ivr_scores[i])
                 if ivr_display_labels:
                     row["true_ivr_label"] = label_for_index(true_ivr, ivr_display_labels)
                     row["pred_ivr_label"] = label_for_index(pred_ivr, ivr_display_labels)
@@ -496,9 +600,10 @@ def main() -> None:
         raise ValueError(f"Target no soportado: {target_name}")
 
     head_type = str(config.get("head_type", ""))
-    if head_type != "ordinal_coral":
+    if head_type not in {"ordinal_coral", "hpi_coral_ivr_score"}:
         raise RuntimeError(
-            "Esta version de 10_test_cnn.py espera checkpoints ordinales (head_type=ordinal_coral)."
+            "Esta version de 10_test_cnn.py solo soporta "
+            "head_type=ordinal_coral o head_type=hpi_coral_ivr_score."
         )
 
     num_classes_hpi = int(config.get("num_classes_hpi", 0))
@@ -514,6 +619,8 @@ def main() -> None:
         raise ValueError(
             "Run con IVR agrupado pero sin ivr_grouping_bins_raw en config."
         )
+    ivr_score_targets = parse_ivr_score_targets(config.get("ivr_score_targets", []))
+    ivr_score_hpi_gate = bool(config.get("ivr_score_hpi_gate_at_inference", True))
     use_ivr_coarse_fine = bool(config.get("use_ivr_coarse_fine_effective", False))
     ivr_coarse_bins = parse_bins_from_config(config.get("ivr_coarse_bins_effective", []))
     if use_ivr_coarse_fine and not ivr_coarse_bins:
@@ -527,7 +634,9 @@ def main() -> None:
         raise FileNotFoundError(f"No existe checkpoint: {checkpoint_path}")
 
     device = resolve_device(args.device)
-    output_dim = output_dim_for_target(target_name, num_classes_hpi, num_classes_ivr)
+    output_dim = output_dim_for_head_type(
+        head_type, target_name, num_classes_hpi, num_classes_ivr
+    )
 
     test_tfms = transforms.Compose(
         [
@@ -558,6 +667,7 @@ def main() -> None:
 
     y_true_parts: list[torch.Tensor] = []
     y_pred_parts: list[torch.Tensor] = []
+    pred_ivr_score_parts: list[torch.Tensor] = []
     photo_codes: list[str] = []
     image_paths: list[str] = []
 
@@ -567,19 +677,30 @@ def main() -> None:
             logits = model(x).cpu()
             pred = decode_predictions(
                 logits,
+                head_type,
                 target_name,
                 num_classes_hpi,
                 num_classes_ivr,
                 use_ivr_coarse_fine=use_ivr_coarse_fine,
                 ivr_coarse_bins=ivr_coarse_bins,
+                ivr_score_targets=ivr_score_targets,
+                ivr_score_hpi_gate=ivr_score_hpi_gate,
+            )
+            pred_ivr_scores = extract_pred_ivr_scores(
+                logits, head_type, target_name, num_classes_hpi
             )
             y_true_parts.append(y)
             y_pred_parts.append(pred)
+            if pred_ivr_scores is not None:
+                pred_ivr_score_parts.append(pred_ivr_scores)
             photo_codes.extend(batch_codes)
             image_paths.extend(batch_paths)
 
     y_true = torch.cat(y_true_parts, dim=0).to(torch.int64)
     y_pred = torch.cat(y_pred_parts, dim=0).to(torch.int64)
+    pred_ivr_scores_all = (
+        torch.cat(pred_ivr_score_parts, dim=0) if pred_ivr_score_parts else None
+    )
 
     abs_err_disc = (y_pred - y_true).abs()
     abs_err = abs_err_disc.to(torch.float32)
@@ -659,6 +780,9 @@ def main() -> None:
         y_pred,
         target=target_name,
         ivr_display_labels=ivr_grouping_class_labels,
+        pred_ivr_scores=(
+            pred_ivr_scores_all.tolist() if pred_ivr_scores_all is not None else None
+        ),
     )
 
     heatmap_records: list[dict[str, Any]] = []
@@ -666,59 +790,66 @@ def main() -> None:
     heatmap_dir = output_dir / "heatmaps"
     heatmap_manifest_path = output_dir / "heatmaps_manifest.csv"
     heatmap_total = len(photo_codes)
-    heatmap_limit = args.heatmap_limit if args.heatmap_limit > 0 else heatmap_total
+    heatmap_limit = max(int(args.heatmap_limit), 0)
 
-    try:
-        heatmap_module = load_heatmap_module()
-        shutil.rmtree(heatmap_dir, ignore_errors=True)
-        heatmap_manifest_path.unlink(missing_ok=True)
-        for idx, (photo_code, image_path) in enumerate(zip(photo_codes, image_paths)):
-            if idx >= heatmap_limit:
-                break
-            true_hpi = None
-            true_ivr = None
-            pred_hpi = None
-            pred_ivr = None
-            if target_name == "both":
-                true_hpi = int(y_true[idx, 0].item())
-                true_ivr = int(y_true[idx, 1].item())
-                pred_hpi = int(y_pred[idx, 0].item())
-                pred_ivr = int(y_pred[idx, 1].item())
-            elif target_name == "hpi":
-                true_hpi = int(y_true[idx, 0].item())
-                pred_hpi = int(y_pred[idx, 0].item())
-            else:
-                true_ivr = int(y_true[idx, 0].item())
-                pred_ivr = int(y_pred[idx, 0].item())
-
-            heatmap_records.extend(
-                heatmap_module.save_prediction_heatmaps(
-                    model=model,
-                    model_name=model_name,
-                    image_path=image_path,
-                    photo_code=photo_code,
-                    target=target_name,
-                    img_size=img_size,
-                    device=device,
-                    output_dir=heatmap_dir,
-                    num_classes_hpi=num_classes_hpi,
-                    num_classes_ivr=num_classes_ivr,
-                    use_ivr_coarse_fine=use_ivr_coarse_fine,
-                    ivr_coarse_bins=ivr_coarse_bins,
-                    pred_hpi=pred_hpi,
-                    pred_ivr=pred_ivr,
-                    true_hpi=true_hpi,
-                    true_ivr=true_ivr,
-                )
+    if heatmap_limit > 0:
+        if head_type != "ordinal_coral":
+            heatmap_error = (
+                "Heatmaps no implementados para head_type=hpi_coral_ivr_score."
             )
-            if (idx + 1) % 50 == 0 or (idx + 1) == heatmap_limit:
-                print(f"Heatmaps: {idx + 1}/{heatmap_limit}")
+            print(f"Aviso: {heatmap_error}")
+        else:
+            try:
+                heatmap_module = load_heatmap_module()
+                shutil.rmtree(heatmap_dir, ignore_errors=True)
+                heatmap_manifest_path.unlink(missing_ok=True)
+                for idx, (photo_code, image_path) in enumerate(zip(photo_codes, image_paths)):
+                    if idx >= heatmap_limit:
+                        break
+                    true_hpi = None
+                    true_ivr = None
+                    pred_hpi = None
+                    pred_ivr = None
+                    if target_name == "both":
+                        true_hpi = int(y_true[idx, 0].item())
+                        true_ivr = int(y_true[idx, 1].item())
+                        pred_hpi = int(y_pred[idx, 0].item())
+                        pred_ivr = int(y_pred[idx, 1].item())
+                    elif target_name == "hpi":
+                        true_hpi = int(y_true[idx, 0].item())
+                        pred_hpi = int(y_pred[idx, 0].item())
+                    else:
+                        true_ivr = int(y_true[idx, 0].item())
+                        pred_ivr = int(y_pred[idx, 0].item())
 
-        if heatmap_records:
-            save_heatmap_manifest_csv(heatmap_manifest_path, heatmap_records)
-    except Exception as exc:
-        heatmap_error = str(exc)
-        print(f"Aviso: no se pudieron generar heatmaps ({exc})")
+                    heatmap_records.extend(
+                        heatmap_module.save_prediction_heatmaps(
+                            model=model,
+                            model_name=model_name,
+                            image_path=image_path,
+                            photo_code=photo_code,
+                            target=target_name,
+                            img_size=img_size,
+                            device=device,
+                            output_dir=heatmap_dir,
+                            num_classes_hpi=num_classes_hpi,
+                            num_classes_ivr=num_classes_ivr,
+                            use_ivr_coarse_fine=use_ivr_coarse_fine,
+                            ivr_coarse_bins=ivr_coarse_bins,
+                            pred_hpi=pred_hpi,
+                            pred_ivr=pred_ivr,
+                            true_hpi=true_hpi,
+                            true_ivr=true_ivr,
+                        )
+                    )
+                    if (idx + 1) % 50 == 0 or (idx + 1) == heatmap_limit:
+                        print(f"Heatmaps: {idx + 1}/{heatmap_limit}")
+
+                if heatmap_records:
+                    save_heatmap_manifest_csv(heatmap_manifest_path, heatmap_records)
+            except Exception as exc:
+                heatmap_error = str(exc)
+                print(f"Aviso: no se pudieron generar heatmaps ({exc})")
 
     metrics = {
         "run_dir": str(run_dir),
@@ -731,6 +862,8 @@ def main() -> None:
         "ivr_label_mode": ivr_label_mode,
         "ivr_grouping_bins_raw": ivr_grouping_bins_raw,
         "ivr_grouping_class_labels": ivr_grouping_class_labels,
+        "ivr_score_targets": ivr_score_targets,
+        "ivr_score_hpi_gate_at_inference": ivr_score_hpi_gate,
         "use_ivr_coarse_fine_effective": use_ivr_coarse_fine,
         "ivr_coarse_bins_effective": ivr_coarse_bins,
         "n_test_samples": len(test_ds),
@@ -748,6 +881,19 @@ def main() -> None:
             "exact_match": acc_exact,
             "within_1": acc_within_1,
             "within_2": acc_within_2,
+        },
+        "4_ivr_score": {
+            "available": pred_ivr_scores_all is not None,
+            "pred_mean": (
+                None
+                if pred_ivr_scores_all is None
+                else float(pred_ivr_scores_all.mean().item())
+            ),
+            "pred_std": (
+                None
+                if pred_ivr_scores_all is None
+                else float(pred_ivr_scores_all.std(unbiased=False).item())
+            ),
         },
         "5_plots": {
             "generated": len(plot_files) > 0,
