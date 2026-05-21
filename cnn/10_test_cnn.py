@@ -291,7 +291,7 @@ def decode_ivr_score_to_class(
     pred = torch.zeros(scores.shape[0], device=scores.device, dtype=torch.int64)
     valid_mask = torch.ones(scores.shape[0], device=scores.device, dtype=torch.bool)
     if use_hpi_gate and hpi_pred is not None:
-        valid_mask = hpi_pred > 0
+        valid_mask = (hpi_pred > 0) & (hpi_pred < 5)
     if valid_mask.any():
         distances = (scores[valid_mask].unsqueeze(1) - anchor_scores.unsqueeze(0)).abs()
         idx = distances.argmin(dim=1)
@@ -367,6 +367,8 @@ def save_predictions_csv(
     target: str,
     ivr_display_labels: Optional[Sequence[str]] = None,
     pred_ivr_scores: Optional[Sequence[float]] = None,
+    true_ivr_applicable: Optional[Sequence[int]] = None,
+    pred_ivr_applicable: Optional[Sequence[int]] = None,
 ) -> None:
     out_path.parent.mkdir(parents=True, exist_ok=True)
 
@@ -383,6 +385,14 @@ def save_predictions_csv(
         ]
         if pred_ivr_scores is not None:
             fieldnames.append("pred_ivr_score")
+        if true_ivr_applicable is not None and pred_ivr_applicable is not None:
+            fieldnames.extend(
+                [
+                    "true_ivr_applicable",
+                    "pred_ivr_applicable",
+                    "ivr_applicability_match",
+                ]
+            )
         if ivr_display_labels:
             fieldnames.extend(["true_ivr_label", "pred_ivr_label"])
     elif target == "hpi":
@@ -391,6 +401,14 @@ def save_predictions_csv(
         fieldnames = ["photo_cod", "image_path", "true_ivr", "pred_ivr", "abs_err_ivr"]
         if pred_ivr_scores is not None:
             fieldnames.append("pred_ivr_score")
+        if true_ivr_applicable is not None and pred_ivr_applicable is not None:
+            fieldnames.extend(
+                [
+                    "true_ivr_applicable",
+                    "pred_ivr_applicable",
+                    "ivr_applicability_match",
+                ]
+            )
         if ivr_display_labels:
             fieldnames.extend(["true_ivr_label", "pred_ivr_label"])
 
@@ -416,6 +434,12 @@ def save_predictions_csv(
                 row["abs_err_ivr"] = abs(pred_ivr - true_ivr)
                 if pred_ivr_scores is not None:
                     row["pred_ivr_score"] = float(pred_ivr_scores[i])
+                if true_ivr_applicable is not None and pred_ivr_applicable is not None:
+                    row["true_ivr_applicable"] = int(true_ivr_applicable[i])
+                    row["pred_ivr_applicable"] = int(pred_ivr_applicable[i])
+                    row["ivr_applicability_match"] = int(
+                        true_ivr_applicable[i] == pred_ivr_applicable[i]
+                    )
                 if ivr_display_labels:
                     row["true_ivr_label"] = label_for_index(true_ivr, ivr_display_labels)
                     row["pred_ivr_label"] = label_for_index(pred_ivr, ivr_display_labels)
@@ -427,6 +451,12 @@ def save_predictions_csv(
                 row["abs_err_ivr"] = abs(pred_ivr - true_ivr)
                 if pred_ivr_scores is not None:
                     row["pred_ivr_score"] = float(pred_ivr_scores[i])
+                if true_ivr_applicable is not None and pred_ivr_applicable is not None:
+                    row["true_ivr_applicable"] = int(true_ivr_applicable[i])
+                    row["pred_ivr_applicable"] = int(pred_ivr_applicable[i])
+                    row["ivr_applicability_match"] = int(
+                        true_ivr_applicable[i] == pred_ivr_applicable[i]
+                    )
                 if ivr_display_labels:
                     row["true_ivr_label"] = label_for_index(true_ivr, ivr_display_labels)
                     row["pred_ivr_label"] = label_for_index(pred_ivr, ivr_display_labels)
@@ -468,6 +498,69 @@ def confusion_matrix_counts(
     for t, p in zip(true_idx.tolist(), pred_idx.tolist()):
         cm[t, p] += 1
     return cm
+
+
+def binary_classification_metrics(
+    y_true_bool: torch.Tensor,
+    y_pred_bool: torch.Tensor,
+) -> dict[str, Any]:
+    y_true_int = y_true_bool.to(torch.int64)
+    y_pred_int = y_pred_bool.to(torch.int64)
+    cm = confusion_matrix_counts(y_true_int, y_pred_int, 0, 1)
+    tn = int(cm[0, 0].item())
+    fp = int(cm[0, 1].item())
+    fn = int(cm[1, 0].item())
+    tp = int(cm[1, 1].item())
+    n = tn + fp + fn + tp
+    accuracy = (tp + tn) / n if n > 0 else 0.0
+    precision = tp / (tp + fp) if (tp + fp) > 0 else 0.0
+    recall = tp / (tp + fn) if (tp + fn) > 0 else 0.0
+    f1 = (
+        (2.0 * precision * recall) / (precision + recall)
+        if (precision + recall) > 0
+        else 0.0
+    )
+    return {
+        "n": n,
+        "tn": tn,
+        "fp": fp,
+        "fn": fn,
+        "tp": tp,
+        "accuracy": float(accuracy),
+        "precision": float(precision),
+        "recall": float(recall),
+        "f1": float(f1),
+        "confusion_matrix": {
+            "labels": ["ivr_0", "ivr_1_7"],
+            "matrix": cm.tolist(),
+        },
+    }
+
+
+def regression_like_metrics(
+    y_true_int: torch.Tensor,
+    y_pred_int: torch.Tensor,
+) -> dict[str, Any]:
+    n = int(y_true_int.numel())
+    if n == 0:
+        return {
+            "n": 0,
+            "mae": None,
+            "rmse": None,
+            "exact": None,
+            "within_1": None,
+            "within_2": None,
+        }
+    abs_err = (y_pred_int - y_true_int).abs().to(torch.float32)
+    sq_err = abs_err.pow(2)
+    return {
+        "n": n,
+        "mae": float(abs_err.mean().item()),
+        "rmse": float(torch.sqrt(sq_err.mean()).item()),
+        "exact": float((abs_err <= 0).float().mean().item()),
+        "within_1": float((abs_err <= 1).float().mean().item()),
+        "within_2": float((abs_err <= 2).float().mean().item()),
+    }
 
 
 def plot_confusion_matrix(
@@ -610,7 +703,8 @@ def main() -> None:
     num_classes_ivr = int(config.get("num_classes_ivr", 0))
     if num_classes_hpi < 2 or num_classes_ivr < 2:
         raise ValueError("num_classes_hpi/num_classes_ivr invalidos en config.json")
-    ivr_label_mode = str(config.get("ivr_label_mode", "raw_8"))
+    ivr_label_mode_raw = config.get("ivr_label_mode", "raw_8")
+    ivr_label_mode = str(ivr_label_mode_raw) if ivr_label_mode_raw else "raw_8"
     ivr_grouping_bins_raw = parse_bins_from_config(config.get("ivr_grouping_bins_raw", []))
     ivr_grouping_class_labels = parse_class_labels_from_config(
         config.get("ivr_grouping_class_labels", [])
@@ -706,11 +800,17 @@ def main() -> None:
     abs_err = abs_err_disc.to(torch.float32)
     sq_err = abs_err.pow(2)
 
+    mae_hpi: Optional[float]
+    rmse_hpi: Optional[float]
+    mae_ivr: Optional[float]
+    rmse_ivr: Optional[float]
+    mae_mean: float
+    rmse_mean: float
+
     if target_name == "both":
         mae_hpi = float(abs_err[:, 0].mean().item())
         mae_ivr = float(abs_err[:, 1].mean().item())
         mae_mean = (mae_hpi + mae_ivr) / 2.0
-
         rmse_hpi = float(torch.sqrt(sq_err[:, 0].mean()).item())
         rmse_ivr = float(torch.sqrt(sq_err[:, 1].mean()).item())
         rmse_mean = (rmse_hpi + rmse_ivr) / 2.0
@@ -718,7 +818,6 @@ def main() -> None:
         mae_hpi = float(abs_err[:, 0].mean().item())
         mae_ivr = None
         mae_mean = mae_hpi
-
         rmse_hpi = float(torch.sqrt(sq_err[:, 0].mean()).item())
         rmse_ivr = None
         rmse_mean = rmse_hpi
@@ -726,34 +825,144 @@ def main() -> None:
         mae_hpi = None
         mae_ivr = float(abs_err[:, 0].mean().item())
         mae_mean = mae_ivr
-
         rmse_hpi = None
         rmse_ivr = float(torch.sqrt(sq_err[:, 0].mean()).item())
         rmse_mean = rmse_ivr
 
-    def discrete_acc(max_diff: int) -> dict[str, float]:
-        if target_name == "both":
-            ok_hpi = (abs_err_disc[:, 0] <= max_diff).float().mean().item()
-            ok_ivr = (abs_err_disc[:, 1] <= max_diff).float().mean().item()
-            ok_both = ((abs_err_disc[:, 0] <= max_diff) & (abs_err_disc[:, 1] <= max_diff)).float().mean().item()
-            ok_mean = (abs_err_disc <= max_diff).float().mean().item()
-            return {
-                "max_diff": max_diff,
-                "acc_hpi": float(ok_hpi),
-                "acc_ivr": float(ok_ivr),
-                "acc_both": float(ok_both),
-                "acc_mean": float(ok_mean),
-            }
-        ok_target = (abs_err_disc[:, 0] <= max_diff).float().mean().item()
-        return {
-            "max_diff": max_diff,
-            f"acc_{target_name}": float(ok_target),
-            "acc_mean": float(ok_target),
+    hpi_metrics: dict[str, Any] = {}
+    ivr_applicability_metrics: dict[str, Any] = {"available": False}
+    ivr_conditional_metrics: dict[str, Any] = {"available": False}
+    ivr_consistency_metrics: dict[str, Any] = {"available": False}
+    legacy_ivr_all_metrics: dict[str, Any] = {"available": False}
+
+    if target_name == "both":
+        hpi_true = y_true[:, 0].to(torch.int64)
+        hpi_pred = y_pred[:, 0].to(torch.int64)
+        hpi_metrics = regression_like_metrics(hpi_true, hpi_pred)
+        hpi_metrics["confusion_matrix"] = {
+            "labels": [str(x) for x in range(num_classes_hpi)],
+            "matrix": confusion_matrix_counts(
+                hpi_true, hpi_pred, 0, num_classes_hpi - 1
+            ).tolist(),
         }
 
-    acc_exact = discrete_acc(0)
-    acc_within_1 = discrete_acc(1)
-    acc_within_2 = discrete_acc(2)
+        legacy_ivr_all_metrics = {
+            "available": True,
+            "definition": "Metrica historica sobre todas las muestras, mezclando IVR=0 con IVR=1..7.",
+            **regression_like_metrics(
+                y_true[:, 1].to(torch.int64), y_pred[:, 1].to(torch.int64)
+            ),
+        }
+        legacy_ivr_all_metrics["confusion_matrix"] = {
+            "labels": [str(x) for x in range(num_classes_ivr)],
+            "matrix": confusion_matrix_counts(
+                y_true[:, 1].to(torch.int64),
+                y_pred[:, 1].to(torch.int64),
+                0,
+                num_classes_ivr - 1,
+            ).tolist(),
+        }
+
+        ivr_structured_metrics_available = (
+            ivr_label_mode == "raw_8" and num_classes_ivr >= 8
+        )
+        if ivr_structured_metrics_available:
+            true_ivr_applicable = ((hpi_true > 0) & (hpi_true < 5)).to(torch.bool)
+            pred_ivr_applicable = (y_pred[:, 1].to(torch.int64) > 0).to(torch.bool)
+            pred_hpi_applicable = ((hpi_pred > 0) & (hpi_pred < 5)).to(torch.bool)
+
+            ivr_applicability_metrics = {
+                "available": True,
+                "definition": "Clasificacion binaria de aplicabilidad de IVR: 0 vs 1..7.",
+                "true_definition": "true_hpi in {1,2,3,4}",
+                "pred_definition": "pred_ivr > 0",
+                **binary_classification_metrics(
+                    true_ivr_applicable, pred_ivr_applicable
+                ),
+            }
+
+            conditional_mask = true_ivr_applicable & pred_ivr_applicable
+            ivr_conditional_metrics = {
+                "available": True,
+                "definition": "Calidad de la nota IVR solo cuando el modelo dijo que IVR aplica y efectivamente debia aplicar.",
+                "subset_definition": "true_hpi in {1,2,3,4} AND pred_ivr > 0",
+                **regression_like_metrics(
+                    y_true[:, 1].to(torch.int64)[conditional_mask],
+                    y_pred[:, 1].to(torch.int64)[conditional_mask],
+                ),
+            }
+            if int(conditional_mask.sum().item()) > 0:
+                ivr_conditional_metrics["confusion_matrix"] = {
+                    "labels": [str(x) for x in range(1, 8)],
+                    "matrix": confusion_matrix_counts(
+                        y_true[:, 1].to(torch.int64)[conditional_mask],
+                        y_pred[:, 1].to(torch.int64)[conditional_mask],
+                        1,
+                        7,
+                    ).tolist(),
+                }
+            else:
+                ivr_conditional_metrics["confusion_matrix"] = {
+                    "labels": [str(x) for x in range(1, 8)],
+                    "matrix": [],
+                }
+
+            consistency_match = pred_hpi_applicable == pred_ivr_applicable
+            ivr_consistency_metrics = {
+                "available": True,
+                "definition": "Consistencia interna entre HPI predicho e IVR predicho.",
+                "expected_ivr_applicable_from_pred_hpi": "pred_hpi in {1,2,3,4}",
+                "pred_definition": "pred_ivr > 0",
+                "n": int(consistency_match.numel()),
+                "consistency_accuracy": float(consistency_match.float().mean().item()),
+                "inconsistent_total": int((~consistency_match).sum().item()),
+                "inconsistent_pred_ivr_positive_but_hpi_zero_5_6": int(
+                    ((~pred_hpi_applicable) & pred_ivr_applicable).sum().item()
+                ),
+                "inconsistent_pred_ivr_zero_but_hpi_1_4": int(
+                    (pred_hpi_applicable & (~pred_ivr_applicable)).sum().item()
+                ),
+                "confusion_matrix": {
+                    "labels": ["expected_ivr_0", "expected_ivr_1_7"],
+                    "matrix": confusion_matrix_counts(
+                        pred_hpi_applicable.to(torch.int64),
+                        pred_ivr_applicable.to(torch.int64),
+                        0,
+                        1,
+                    ).tolist(),
+                },
+            }
+        else:
+            ivr_applicability_metrics = {
+                "available": False,
+                "reason": "IVR no esta en formato raw_8; no se puede separar 0 vs 1..7 de forma fiable.",
+            }
+            ivr_conditional_metrics = {
+                "available": False,
+                "reason": "IVR no esta en formato raw_8; no se puede evaluar la nota condicional 1..7 de forma fiable.",
+            }
+            ivr_consistency_metrics = {
+                "available": False,
+                "reason": "IVR no esta en formato raw_8; la consistencia HPI-IVR no es comparable con 0 vs 1..7.",
+            }
+    elif target_name == "hpi":
+        hpi_true = y_true[:, 0].to(torch.int64)
+        hpi_pred = y_pred[:, 0].to(torch.int64)
+        hpi_metrics = regression_like_metrics(hpi_true, hpi_pred)
+        hpi_metrics["confusion_matrix"] = {
+            "labels": [str(x) for x in range(num_classes_hpi)],
+            "matrix": confusion_matrix_counts(
+                hpi_true, hpi_pred, 0, num_classes_hpi - 1
+            ).tolist(),
+        }
+    else:
+        legacy_ivr_all_metrics = {
+            "available": True,
+            "definition": "Metrica historica IVR-only sobre todas las muestras del target.",
+            **regression_like_metrics(
+                y_true[:, 0].to(torch.int64), y_pred[:, 0].to(torch.int64)
+            ),
+        }
 
     class_limits = {
         "hpi": (0, num_classes_hpi - 1),
@@ -771,6 +980,18 @@ def main() -> None:
         class_display_labels=class_display_labels,
     )
 
+    true_ivr_applicable_csv: Optional[list[int]] = None
+    pred_ivr_applicable_csv: Optional[list[int]] = None
+    if target_name == "both" and ivr_applicability_metrics.get("available", False):
+        true_ivr_applicable_csv = (
+            ((y_true[:, 0].to(torch.int64) > 0) & (y_true[:, 0].to(torch.int64) < 5))
+            .to(torch.int64)
+            .tolist()
+        )
+        pred_ivr_applicable_csv = (
+            (y_pred[:, 1].to(torch.int64) > 0).to(torch.int64).tolist()
+        )
+
     predictions_path = output_dir / "predictions_test.csv"
     save_predictions_csv(
         predictions_path,
@@ -783,6 +1004,8 @@ def main() -> None:
         pred_ivr_scores=(
             pred_ivr_scores_all.tolist() if pred_ivr_scores_all is not None else None
         ),
+        true_ivr_applicable=true_ivr_applicable_csv,
+        pred_ivr_applicable=pred_ivr_applicable_csv,
     )
 
     heatmap_records: list[dict[str, Any]] = []
@@ -867,22 +1090,25 @@ def main() -> None:
         "use_ivr_coarse_fine_effective": use_ivr_coarse_fine,
         "ivr_coarse_bins_effective": ivr_coarse_bins,
         "n_test_samples": len(test_ds),
-        "1_mae": {
+        "1_hpi": {
+            "available": target_name in {"both", "hpi"},
+            "mae": mae_hpi,
+            "rmse": rmse_hpi,
+            "metrics": hpi_metrics,
+        },
+        "2_ivr_applicability": ivr_applicability_metrics,
+        "3_ivr_label_given_applicable": ivr_conditional_metrics,
+        "4_ivr_hpi_consistency": ivr_consistency_metrics,
+        "legacy_summary": {
             "mae_hpi": mae_hpi,
-            "mae_ivr": mae_ivr,
-            "mae_mean": mae_mean,
-        },
-        "2_rmse": {
             "rmse_hpi": rmse_hpi,
-            "rmse_ivr": rmse_ivr,
-            "rmse_mean": rmse_mean,
+            "mae_ivr_all_samples": mae_ivr,
+            "rmse_ivr_all_samples": rmse_ivr,
+            "mae_mean_legacy": mae_mean,
+            "rmse_mean_legacy": rmse_mean,
         },
-        "3_discrete_accuracy": {
-            "exact_match": acc_exact,
-            "within_1": acc_within_1,
-            "within_2": acc_within_2,
-        },
-        "4_ivr_score": {
+        "legacy_ivr_all_samples": legacy_ivr_all_metrics,
+        "legacy_ivr_score": {
             "available": pred_ivr_scores_all is not None,
             "pred_mean": (
                 None
@@ -923,33 +1149,88 @@ def main() -> None:
 
     print(f"Evaluacion completada en: {output_dir}")
     if target_name == "both":
-        print(f"1) MAE: mae_hpi={mae_hpi:.4f} mae_ivr={mae_ivr:.4f} mae_mean={mae_mean:.4f}")
-        print(f"2) RMSE: rmse_hpi={rmse_hpi:.4f} rmse_ivr={rmse_ivr:.4f} rmse_mean={rmse_mean:.4f}")
-        if use_ivr_coarse_fine:
-            print(f"   IVR coarse-to-fine: bins={ivr_coarse_bins}")
         print(
-            "3) Acc discreta: "
-            f"exact acc_hpi={acc_exact['acc_hpi']:.4f} acc_ivr={acc_exact['acc_ivr']:.4f} acc_both={acc_exact['acc_both']:.4f}; "
-            f"within1 acc_hpi={acc_within_1['acc_hpi']:.4f} acc_ivr={acc_within_1['acc_ivr']:.4f} acc_both={acc_within_1['acc_both']:.4f}; "
-            f"within2 acc_hpi={acc_within_2['acc_hpi']:.4f} acc_ivr={acc_within_2['acc_ivr']:.4f} acc_both={acc_within_2['acc_both']:.4f}"
+            "1) HPI: "
+            f"mae={hpi_metrics['mae']:.4f} rmse={hpi_metrics['rmse']:.4f} "
+            f"exact={hpi_metrics['exact']:.4f} within1={hpi_metrics['within_1']:.4f} "
+            f"within2={hpi_metrics['within_2']:.4f}"
+        )
+        if ivr_applicability_metrics.get("available", False):
+            print(
+                "2) IVR aplicabilidad: "
+                f"acc={ivr_applicability_metrics['accuracy']:.4f} "
+                f"precision={ivr_applicability_metrics['precision']:.4f} "
+                f"recall={ivr_applicability_metrics['recall']:.4f} "
+                f"f1={ivr_applicability_metrics['f1']:.4f} "
+                f"(tp={ivr_applicability_metrics['tp']} fp={ivr_applicability_metrics['fp']} "
+                f"fn={ivr_applicability_metrics['fn']} tn={ivr_applicability_metrics['tn']})"
+            )
+        else:
+            print(
+                "2) IVR aplicabilidad: no disponible"
+                + (
+                    f" ({ivr_applicability_metrics['reason']})"
+                    if "reason" in ivr_applicability_metrics
+                    else ""
+                )
+            )
+        if ivr_conditional_metrics.get("available", False):
+            cond_n = ivr_conditional_metrics["n"]
+            if cond_n > 0:
+                print(
+                    "3) IVR nota condicional: "
+                    f"n={cond_n} mae={ivr_conditional_metrics['mae']:.4f} "
+                    f"rmse={ivr_conditional_metrics['rmse']:.4f} "
+                    f"exact={ivr_conditional_metrics['exact']:.4f} "
+                    f"within1={ivr_conditional_metrics['within_1']:.4f} "
+                    f"within2={ivr_conditional_metrics['within_2']:.4f}"
+                )
+            else:
+                print("3) IVR nota condicional: n=0")
+        else:
+            print(
+                "3) IVR nota condicional: no disponible"
+                + (
+                    f" ({ivr_conditional_metrics['reason']})"
+                    if "reason" in ivr_conditional_metrics
+                    else ""
+                )
+            )
+        if ivr_consistency_metrics.get("available", False):
+            print(
+                "4) Consistencia HPI-IVR: "
+                f"acc={ivr_consistency_metrics['consistency_accuracy']:.4f} "
+                f"incons_total={ivr_consistency_metrics['inconsistent_total']} "
+                f"pos_when_zero_expected={ivr_consistency_metrics['inconsistent_pred_ivr_positive_but_hpi_zero_5_6']} "
+                f"zero_when_positive_expected={ivr_consistency_metrics['inconsistent_pred_ivr_zero_but_hpi_1_4']}"
+            )
+        else:
+            print(
+                "4) Consistencia HPI-IVR: no disponible"
+                + (
+                    f" ({ivr_consistency_metrics['reason']})"
+                    if "reason" in ivr_consistency_metrics
+                    else ""
+                )
+            )
+        print(
+            "Legacy IVR all-samples: "
+            f"mae={mae_ivr:.4f} rmse={rmse_ivr:.4f} mae_mean={mae_mean:.4f}"
         )
     elif target_name == "hpi":
-        print(f"1) MAE: mae_hpi={mae_hpi:.4f} mae_mean={mae_mean:.4f}")
-        print(f"2) RMSE: rmse_hpi={rmse_hpi:.4f} rmse_mean={rmse_mean:.4f}")
         print(
-            "3) Acc discreta: "
-            f"exact acc_hpi={acc_exact['acc_hpi']:.4f}; "
-            f"within1 acc_hpi={acc_within_1['acc_hpi']:.4f}; "
-            f"within2 acc_hpi={acc_within_2['acc_hpi']:.4f}"
+            "1) HPI: "
+            f"mae={hpi_metrics['mae']:.4f} rmse={hpi_metrics['rmse']:.4f} "
+            f"exact={hpi_metrics['exact']:.4f} within1={hpi_metrics['within_1']:.4f} "
+            f"within2={hpi_metrics['within_2']:.4f}"
         )
     else:
-        print(f"1) MAE: mae_ivr={mae_ivr:.4f} mae_mean={mae_mean:.4f}")
-        print(f"2) RMSE: rmse_ivr={rmse_ivr:.4f} rmse_mean={rmse_mean:.4f}")
+        print(f"1) IVR legacy: mae={mae_ivr:.4f} rmse={rmse_ivr:.4f}")
         print(
-            "3) Acc discreta: "
-            f"exact acc_ivr={acc_exact['acc_ivr']:.4f}; "
-            f"within1 acc_ivr={acc_within_1['acc_ivr']:.4f}; "
-            f"within2 acc_ivr={acc_within_2['acc_ivr']:.4f}"
+            "2) IVR legacy detalle: "
+            f"exact={legacy_ivr_all_metrics['exact']:.4f}; "
+            f"within1={legacy_ivr_all_metrics['within_1']:.4f}; "
+            f"within2={legacy_ivr_all_metrics['within_2']:.4f}"
         )
     if plot_files:
         print(f"5) Plots (confusion matrix): {', '.join(plot_files)}")

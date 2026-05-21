@@ -83,8 +83,6 @@ CNN_TEST_WORKERS ?= 4
 CNN_TEST_DEVICE ?= auto
 CNN_TEST_OUT ?=
 CNN_TEST_HEATMAP_LIMIT ?= 0
-CNN_IVR_SCORE_LOSS ?= huber
-CNN_IVR_SCORE_DELTA ?= 0.1
 
 # Colores para output
 BLUE = \033[0;34m
@@ -210,5 +208,5 @@ cnn_train_ivr_grouped: ## Entrena la variante ordinal con IVR agrupado 01/23/45/
 
 cnn_train_hpi_coral_ivr_score: ## Entrena HPI ordinal + IVR score continuo
 	@echo "$(BLUE)Entrenando CNN HPI CORAL-like + IVR score$(NC)"
-	$(PYTHON) $(SCRIPT_CNN_TRAIN_HPI_CORAL_IVR_SCORE) --train-csv $(CNN_TRAIN_CSV) --val-csv $(CNN_VAL_CSV) --out-dir $(CNN_RUN_DIR) --model $(CNN_MODEL) --target $(CNN_TARGET) --img-size $(CNN_IMG) --epochs $(CNN_EPOCHS) --batch-size $(CNN_BATCH) --lr $(CNN_LR) --weight-decay $(CNN_WD) --both-loss-weight-hpi $(CNN_BOTH_W_HPI) --both-loss-weight-ivr $(CNN_BOTH_W_IVR) --ivr-score-loss $(CNN_IVR_SCORE_LOSS) --ivr-score-delta $(CNN_IVR_SCORE_DELTA) --workers $(CNN_WORKERS) --seed $(CNN_SEED) --device $(CNN_DEVICE) --max-train-samples $(CNN_MAX_TRAIN) --max-val-samples $(CNN_MAX_VAL) --early-stopping-patience $(CNN_ES_PATIENCE) --early-stopping-min-delta $(CNN_ES_MIN_DELTA) $(if $(filter 1 true TRUE yes YES,$(CNN_PRETRAINED)),--pretrained,) $(if $(filter 1 true TRUE yes YES,$(CNN_AMP)),--amp,)
+	$(PYTHON) $(SCRIPT_CNN_TRAIN_HPI_CORAL_IVR_SCORE) --train-csv $(CNN_TRAIN_CSV) --val-csv $(CNN_VAL_CSV) --out-dir $(CNN_RUN_DIR) --model $(CNN_MODEL) --target $(CNN_TARGET) --img-size $(CNN_IMG) --epochs $(CNN_EPOCHS) --batch-size $(CNN_BATCH) --lr $(CNN_LR) --weight-decay $(CNN_WD) --both-loss-weight-hpi $(CNN_BOTH_W_HPI) --both-loss-weight-ivr $(CNN_BOTH_W_IVR) --workers $(CNN_WORKERS) --seed $(CNN_SEED) --device $(CNN_DEVICE) --max-train-samples $(CNN_MAX_TRAIN) --max-val-samples $(CNN_MAX_VAL) --early-stopping-patience $(CNN_ES_PATIENCE) --early-stopping-min-delta $(CNN_ES_MIN_DELTA) $(if $(filter 1 true TRUE yes YES,$(CNN_PRETRAINED)),--pretrained,) $(if $(filter 1 true TRUE yes YES,$(CNN_AMP)),--amp,)
 	@echo "$(GREEN)Entrenamiento HPI CORAL-like + IVR score finalizado. Salida: $(CNN_RUN_DIR)$(NC)"

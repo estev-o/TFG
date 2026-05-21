@@ -275,3 +275,34 @@ Comparativa de la run agrupada `13_ivr_grouped_convnext_tiny_es` frente al basel
 5. Conclusión: agrupar IVR cambia la distribución de errores, pero por ahora no resuelve el problema y no mejora de forma robusta al baseline `9`.
 
 
+2026-05-21
+Se cambió de estrategia en `13_hpi_coral_ivr_score.py` para acercarnos más a cómo los expertos interpretan `IVR`, sin tocar `HPI`.
+
+Cómo quedó `13_hpi_coral_ivr_score.py`:
+1. `HPI` se mantiene igual que en `09_train_ordinal.py`: misma formulación ordinal tipo CORAL-like, con `K-1` logits, `BCEWithLogits` y decodificación por thresholds. Es decir, no cambiamos la parte de `HPI`.
+2. `IVR` deja de tratarse como 8 clases ordinales `0..7`. Ahora se predice como un score continuo `0..1` que representa el eje `peces <-> erizos`.
+3. Para mapear la escala experta al score continuo se usan anclas: `1->0.00`, `2->0.05`, `3->0.25`, `4->0.50`, `5->0.75`, `6->0.95`, `7->1.00`.
+4. La loss de `IVR` se aplica solo cuando tiene sentido biológicamente, o sea en muestras con `HPI in {1,2,3,4}` y `IVR > 0`.
+5. Si `pred_hpi` cae en `0`, `5` o `6`, entonces `pred_ivr` se fuerza a `0`. Solo si `pred_hpi in {1,2,3,4}` se usa el score continuo para discretizar `IVR` a `1..7`.
+6. Se simplificó la variante y se dejaron fuera ramas experimentales que ya no interesaban para esta prueba: la loss de `IVR` queda fija en `MSE` y se quitaron las opciones antiguas de `Huber`/delta para este script.
+
+Justificación:
+1. La guía experta deja claro que `IVR=0` no pertenece realmente a la misma escala que `1..7`: `0` significa "no aplica / no hay marcas", mientras que `1..7` representan proporción entre ambos tipos de herbivoría.
+2. Por eso tenía poco sentido seguir tratando `IVR` completo como una sola escala ordinal `0..7`, porque mezcla dos problemas distintos:
+- decidir si `IVR` aplica o no
+- decidir la nota `1..7` cuando sí aplica
+3. Además, en el dataset casi todos los casos con `HPI in {0,5,6}` tienen `IVR=0`, así que forzar esa regla en inferencia hace el modelo más coherente con la semántica del problema.
+
+Se refactorizó también `10_test_cnn.py` para que la evaluación sirva tanto para la baseline `9_weighted_0307_cnvnxt_es` como para `13_hpi_coral_ivr_score.py`, pero usando métricas de `IVR` más alineadas con el problema real:
+1. `HPI` se sigue evaluando igual que antes: `mae`, `rmse`, `exact`, `within_1`, `within_2` y matriz de confusión.
+2. `IVR` se separa en dos niveles:
+- aplicabilidad de `IVR`: binario `0` frente a `1..7`
+- calidad de la nota de `IVR` solo dentro de los casos en que realmente debía haber nota y el modelo también la dio
+3. Para la aplicabilidad de `IVR` se guardan `accuracy`, `precision`, `recall`, `f1` y matriz de confusión.
+4. Para la nota condicional de `IVR` se calculan `mae`, `rmse`, `exact`, `within_1`, `within_2` y matriz de confusión solo sobre el subconjunto válido.
+5. Además se añadió una métrica de consistencia interna `HPI-IVR`, para medir cuántas veces la predicción de `IVR` contradice lo que implicaría el `HPI` predicho.
+6. La métrica antigua de `IVR` sobre todas las muestras se mantiene como `legacy`, porque sigue siendo útil para comparar históricamente con runs viejas, pero ya no debería interpretarse como la métrica principal.
+
+La idea de este cambio de test es que, si una muestra real debería tener `IVR=0` y el modelo no predice `HPI` en `0/5/6`, el error que aparece en `IVR` no debe leerse automáticamente como un fallo puro de la cabeza de `IVR`, porque muchas veces es un error arrastrado por `HPI`. Separar aplicabilidad y nota hace la lectura bastante más justa.
+
+Nota de limpieza de dataset: se revisó la consistencia de la regla `HPI in {0,5,6} => IVR=0` y aparecieron solo 4 incumplimientos (`VI2078`, `VI3010`, `VI4322`, `VI4337`). Se eliminaron del `dataset`, de `cnn/manifest.csv`, de los `splits` afectados y también sus imágenes en `out/` y `out_img_norm/`.

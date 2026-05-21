@@ -76,23 +76,6 @@ def parse_args() -> argparse.Namespace:
         default=0.6,
         help="Peso de la loss de IVR cuando target=both (se normaliza con HPI).",
     )
-    parser.add_argument(
-        "--ivr-score-loss",
-        choices=["huber", "mse", "mae"],
-        default="huber",
-        help="Loss del score continuo de IVR (aplicada solo cuando IVR>0).",
-    )
-    parser.add_argument(
-        "--ivr-score-delta",
-        type=float,
-        default=0.1,
-        help="Delta para Huber en la loss continua de IVR.",
-    )
-    parser.add_argument(
-        "--disable-hpi-gate-for-ivr",
-        action="store_true",
-        help="Si se activa, IVR no se fuerza a 0 cuando pred_hpi=0 en inferencia.",
-    )
     parser.add_argument("--workers", type=int, default=4)
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--device", default="auto", help="auto|cpu|cuda")
@@ -167,7 +150,6 @@ def ivr_score_targets_from_labels(labels: torch.Tensor) -> torch.Tensor:
 def decode_ivr_score_to_class(
     scores: torch.Tensor,
     hpi_pred: Optional[torch.Tensor] = None,
-    use_hpi_gate: bool = True,
 ) -> torch.Tensor:
     anchor_classes = torch.tensor(
         sorted(IVR_SCORE_TARGETS_BY_CLASS.keys()),
@@ -181,8 +163,8 @@ def decode_ivr_score_to_class(
     )
     pred = torch.zeros(scores.shape[0], device=scores.device, dtype=torch.int64)
     valid_mask = torch.ones(scores.shape[0], device=scores.device, dtype=torch.bool)
-    if use_hpi_gate and hpi_pred is not None:
-        valid_mask = hpi_pred > 0
+    if hpi_pred is not None:
+        valid_mask = (hpi_pred > 0) & (hpi_pred < 5)
     if valid_mask.any():
         distances = (scores[valid_mask].unsqueeze(1) - anchor_scores.unsqueeze(0)).abs()
         idx = distances.argmin(dim=1)
@@ -276,8 +258,6 @@ class HpiCoralIvrScoreLoss(nn.Module):
         num_classes_hpi: int,
         both_weight_hpi: float = 0.5,
         both_weight_ivr: float = 0.5,
-        ivr_score_loss: str = "huber",
-        ivr_score_delta: float = 0.1,
     ):
         super().__init__()
         self.target = target
@@ -285,25 +265,21 @@ class HpiCoralIvrScoreLoss(nn.Module):
         self.hpi_dim = num_classes_hpi - 1
         self.both_weight_hpi = both_weight_hpi
         self.both_weight_ivr = both_weight_ivr
-        self.ivr_score_loss = ivr_score_loss
-        self.ivr_score_delta = ivr_score_delta
 
     def ivr_regression_loss(
-        self, pred_scores: torch.Tensor, true_labels_ivr: torch.Tensor
+        self,
+        pred_scores: torch.Tensor,
+        true_labels_hpi: torch.Tensor,
+        true_labels_ivr: torch.Tensor,
     ) -> torch.Tensor:
-        valid_mask = true_labels_ivr > 0
+        valid_mask = (true_labels_ivr > 0) & (true_labels_hpi > 0) & (true_labels_hpi < 5)
         if not valid_mask.any():
             return pred_scores.sum() * 0.0
 
         target_scores = ivr_score_targets_from_labels(true_labels_ivr)
         pred_valid = pred_scores[valid_mask]
         target_valid = target_scores[valid_mask]
-
-        if self.ivr_score_loss == "mse":
-            return F.mse_loss(pred_valid, target_valid)
-        if self.ivr_score_loss == "mae":
-            return F.l1_loss(pred_valid, target_valid)
-        return F.huber_loss(pred_valid, target_valid, delta=self.ivr_score_delta)
+        return F.mse_loss(pred_valid, target_valid)
 
     def forward(self, logits: torch.Tensor, labels: torch.Tensor) -> torch.Tensor:
         if self.target == "both":
@@ -313,7 +289,9 @@ class HpiCoralIvrScoreLoss(nn.Module):
             hpi_levels = ordinal_levels(labels[:, 0], self.num_classes_hpi)
             loss_hpi = F.binary_cross_entropy_with_logits(hpi_logits, hpi_levels)
             pred_ivr_scores = torch.sigmoid(ivr_score_logits)
-            loss_ivr = self.ivr_regression_loss(pred_ivr_scores, labels[:, 1])
+            loss_ivr = self.ivr_regression_loss(
+                pred_ivr_scores, labels[:, 0], labels[:, 1]
+            )
             return (self.both_weight_hpi * loss_hpi) + (
                 self.both_weight_ivr * loss_ivr
             )
@@ -336,7 +314,6 @@ def decode_predictions(
     logits: torch.Tensor,
     target: str,
     num_classes_hpi: int,
-    use_hpi_gate_for_ivr: bool,
 ) -> torch.Tensor:
     if target == "both":
         hpi_dim = num_classes_hpi - 1
@@ -345,7 +322,6 @@ def decode_predictions(
         ivr_pred = decode_ivr_score_to_class(
             ivr_scores,
             hpi_pred=hpi_pred,
-            use_hpi_gate=use_hpi_gate_for_ivr,
         )
         return torch.stack([hpi_pred, ivr_pred], dim=1).to(torch.float32)
 
@@ -395,7 +371,6 @@ def run_epoch_val(
     device: torch.device,
     target: str,
     num_classes_hpi: int,
-    use_hpi_gate_for_ivr: bool,
 ) -> tuple[float, Optional[float], Optional[float], float]:
     model.eval()
     total_loss = 0.0
@@ -417,7 +392,6 @@ def run_epoch_val(
                 logits,
                 target,
                 num_classes_hpi,
-                use_hpi_gate_for_ivr=use_hpi_gate_for_ivr,
             )
             abs_err = (pred - y.to(torch.float32)).abs()
             bs = y.size(0)
@@ -580,7 +554,6 @@ def main() -> None:
     set_seed(args.seed)
     device = resolve_device(args.device)
     amp_enabled = args.amp and device.type == "cuda"
-    use_hpi_gate_for_ivr = not args.disable_hpi_gate_for_ivr
 
     train_tfms = transforms.Compose(
         [
@@ -647,8 +620,6 @@ def main() -> None:
         num_classes_hpi=num_classes_hpi,
         both_weight_hpi=both_weight_hpi,
         both_weight_ivr=both_weight_ivr,
-        ivr_score_loss=args.ivr_score_loss,
-        ivr_score_delta=args.ivr_score_delta,
     )
     optimizer = torch.optim.AdamW(
         model.parameters(), lr=args.lr, weight_decay=args.weight_decay
@@ -672,9 +643,9 @@ def main() -> None:
             "both_loss_weight_hpi_effective": both_weight_hpi,
             "both_loss_weight_ivr_effective": both_weight_ivr,
             "ivr_score_targets": ivr_score_targets_serializable(),
-            "ivr_score_loss_effective": args.ivr_score_loss,
-            "ivr_score_delta_effective": args.ivr_score_delta,
-            "ivr_score_hpi_gate_at_inference": use_hpi_gate_for_ivr,
+            "ivr_score_loss_effective": "mse",
+            "ivr_score_hpi_zero_classes": [0, 5, 6],
+            "ivr_score_active_hpi_classes": [1, 2, 3, 4],
         }
     )
     with (out_dir / "config.json").open("w", encoding="utf-8") as f:
@@ -698,8 +669,8 @@ def main() -> None:
             f"Pesos de loss both: hpi={both_weight_hpi:.3f} ivr={both_weight_ivr:.3f}"
         )
         print(
-            f"IVR score activo: loss={args.ivr_score_loss} delta={args.ivr_score_delta:.4f} "
-            f"gate_hpi={use_hpi_gate_for_ivr}"
+            "IVR score activo: loss=mse fija; solo aplica con HPI en {1,2,3,4}; "
+            "si HPI es 0/5/6, entonces IVR=0"
         )
 
     for epoch in range(1, args.epochs + 1):
@@ -713,7 +684,6 @@ def main() -> None:
             device,
             args.target,
             num_classes_hpi,
-            use_hpi_gate_for_ivr=use_hpi_gate_for_ivr,
         )
 
         metrics = EpochMetrics(
@@ -736,9 +706,9 @@ def main() -> None:
             "num_classes_ivr": num_classes_ivr,
             "output_dim": output_dim,
             "ivr_score_targets": ivr_score_targets_serializable(),
-            "ivr_score_loss_effective": args.ivr_score_loss,
-            "ivr_score_delta_effective": args.ivr_score_delta,
-            "ivr_score_hpi_gate_at_inference": use_hpi_gate_for_ivr,
+            "ivr_score_loss_effective": "mse",
+            "ivr_score_hpi_zero_classes": [0, 5, 6],
+            "ivr_score_active_hpi_classes": [1, 2, 3, 4],
         }
         torch.save(ckpt_payload, out_dir / "last.pt")
         improvement = best_mae - mae_mean
