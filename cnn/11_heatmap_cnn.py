@@ -80,6 +80,14 @@ def output_dim_for_target(
         raise ValueError(
             "La variante hpi_coral_ivr_score no soporta target=ivr en heatmaps."
         )
+    if head_type == "hpi_coral_ivr_dual":
+        if target == "both":
+            return num_classes_hpi + 1
+        if target == "hpi":
+            return num_classes_hpi - 1
+        raise ValueError(
+            "La variante hpi_coral_ivr_dual no soporta target=ivr en heatmaps."
+        )
     if target == "both":
         return (num_classes_hpi - 1) + (num_classes_ivr - 1)
     if target == "hpi":
@@ -343,6 +351,7 @@ def save_prediction_heatmaps(
     ivr_coarse_bins: Optional[Sequence[tuple[int, int]]] = None,
     ivr_score_targets: Optional[dict[int, float]] = None,
     ivr_score_hpi_gate: bool = True,
+    ivr_app_threshold: float = 0.5,
     pred_hpi: Optional[int] = None,
     pred_ivr: Optional[int] = None,
     true_hpi: Optional[int] = None,
@@ -394,6 +403,50 @@ def save_prediction_heatmaps(
                         )
                     else:
                         pred_ivr_effective = int(pred_ivr)
+                    if pred_ivr_effective > 0:
+                        anchor = float((ivr_score_targets or {})[pred_ivr_effective])
+                        tasks.append(
+                            {
+                                "task": "ivr",
+                                "pred_label": pred_ivr_effective,
+                                "true_label": true_ivr,
+                                "score": -((ivr_score_value - anchor) ** 2).sum(),
+                            }
+                        )
+                elif head_type == "hpi_coral_ivr_dual":
+                    ivr_app_logit = logits[:, hpi_dim]
+                    ivr_score_logit = logits[:, hpi_dim + 1]
+                    ivr_app_prob = torch.sigmoid(ivr_app_logit)
+                    ivr_score_value = torch.sigmoid(ivr_score_logit)
+                    pred_ivr_applicable = bool(
+                        float(ivr_app_prob[0].item()) >= ivr_app_threshold
+                    )
+                    if pred_ivr is None:
+                        pred_ivr_effective = int(
+                            decode_ivr_score_to_class(
+                                ivr_score_value,
+                                ivr_score_targets or {},
+                                hpi_pred=None,
+                                use_hpi_gate=False,
+                            )[0].item()
+                        )
+                        if not pred_ivr_applicable:
+                            pred_ivr_effective = 0
+                    else:
+                        pred_ivr_effective = int(pred_ivr)
+                        pred_ivr_applicable = pred_ivr_effective > 0
+                    tasks.append(
+                        {
+                            "task": "ivr_app",
+                            "pred_label": int(pred_ivr_applicable),
+                            "true_label": (
+                                None
+                                if true_ivr is None
+                                else int(true_ivr > 0)
+                            ),
+                            "score": ivr_app_logit.sum(),
+                        }
+                    )
                     if pred_ivr_effective > 0:
                         anchor = float((ivr_score_targets or {})[pred_ivr_effective])
                         tasks.append(
@@ -515,7 +568,7 @@ def main() -> None:
     if target_name not in {"both", "hpi", "ivr"}:
         raise ValueError(f"Target no soportado: {target_name}")
     head_type = str(config.get("head_type", "ordinal_coral"))
-    if head_type not in {"ordinal_coral", "hpi_coral_ivr_score"}:
+    if head_type not in {"ordinal_coral", "hpi_coral_ivr_score", "hpi_coral_ivr_dual"}:
         raise ValueError(f"head_type no soportado en heatmaps: {head_type}")
 
     num_classes_hpi = int(config.get("num_classes_hpi", 0))
@@ -534,6 +587,7 @@ def main() -> None:
     ivr_coarse_bins = parse_bins_from_config(config.get("ivr_coarse_bins_effective", []))
     ivr_score_targets = parse_ivr_score_targets(config.get("ivr_score_targets", []))
     ivr_score_hpi_gate = bool(config.get("ivr_score_hpi_gate_at_inference", True))
+    ivr_app_threshold = float(config.get("ivr_app_threshold", 0.5))
     img_size = args.img_size if args.img_size > 0 else int(config.get("img_size", 224))
     checkpoint_path = run_dir / args.checkpoint
     if not checkpoint_path.exists():
@@ -569,6 +623,7 @@ def main() -> None:
         ivr_coarse_bins=ivr_coarse_bins,
         ivr_score_targets=ivr_score_targets,
         ivr_score_hpi_gate=ivr_score_hpi_gate,
+        ivr_app_threshold=ivr_app_threshold,
         true_hpi=true_hpi,
         true_ivr=true_ivr,
     )

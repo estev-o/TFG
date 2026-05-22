@@ -181,6 +181,14 @@ def output_dim_for_head_type(
         raise ValueError(
             "La variante hpi_coral_ivr_score no soporta target=ivr en evaluacion."
         )
+    if head_type == "hpi_coral_ivr_dual":
+        if target == "both":
+            return num_classes_hpi + 1
+        if target == "hpi":
+            return num_classes_hpi - 1
+        raise ValueError(
+            "La variante hpi_coral_ivr_dual no soporta target=ivr en evaluacion."
+        )
     if target == "both":
         return (num_classes_hpi - 1) + (num_classes_ivr - 1)
     if target == "hpi":
@@ -309,6 +317,7 @@ def decode_predictions(
     ivr_coarse_bins: Optional[Sequence[tuple[int, int]]] = None,
     ivr_score_targets: Optional[dict[int, float]] = None,
     ivr_score_hpi_gate: bool = True,
+    ivr_app_threshold: float = 0.5,
 ) -> torch.Tensor:
     if head_type == "hpi_coral_ivr_score":
         if target == "both":
@@ -326,6 +335,28 @@ def decode_predictions(
             pred = decode_ordinal_logits(logits)
             return pred.unsqueeze(1).to(torch.int64)
         raise ValueError("head_type hpi_coral_ivr_score no soporta target=ivr.")
+    if head_type == "hpi_coral_ivr_dual":
+        if target == "both":
+            hpi_dim = num_classes_hpi - 1
+            pred_hpi = decode_ordinal_logits(logits[:, :hpi_dim])
+            ivr_app_prob = torch.sigmoid(logits[:, hpi_dim])
+            ivr_scores = torch.sigmoid(logits[:, hpi_dim + 1])
+            pred_ivr = decode_ivr_score_to_class(
+                ivr_scores,
+                ivr_score_targets or {},
+                hpi_pred=None,
+                use_hpi_gate=False,
+            )
+            pred_ivr = torch.where(
+                ivr_app_prob >= ivr_app_threshold,
+                pred_ivr,
+                torch.zeros_like(pred_ivr),
+            )
+            return torch.stack([pred_hpi, pred_ivr], dim=1).to(torch.int64)
+        if target == "hpi":
+            pred = decode_ordinal_logits(logits)
+            return pred.unsqueeze(1).to(torch.int64)
+        raise ValueError("head_type hpi_coral_ivr_dual no soporta target=ivr.")
 
     if target == "both":
         hpi_dim = num_classes_hpi - 1
@@ -350,7 +381,23 @@ def extract_pred_ivr_scores(
     target: str,
     num_classes_hpi: int,
 ) -> Optional[torch.Tensor]:
-    if head_type != "hpi_coral_ivr_score":
+    if head_type not in {"hpi_coral_ivr_score", "hpi_coral_ivr_dual"}:
+        return None
+    if target != "both":
+        return None
+    hpi_dim = num_classes_hpi - 1
+    if head_type == "hpi_coral_ivr_score":
+        return torch.sigmoid(logits[:, hpi_dim]).to(torch.float32)
+    return torch.sigmoid(logits[:, hpi_dim + 1]).to(torch.float32)
+
+
+def extract_pred_ivr_app_probs(
+    logits: torch.Tensor,
+    head_type: str,
+    target: str,
+    num_classes_hpi: int,
+) -> Optional[torch.Tensor]:
+    if head_type != "hpi_coral_ivr_dual":
         return None
     if target != "both":
         return None
@@ -367,6 +414,7 @@ def save_predictions_csv(
     target: str,
     ivr_display_labels: Optional[Sequence[str]] = None,
     pred_ivr_scores: Optional[Sequence[float]] = None,
+    pred_ivr_app_probs: Optional[Sequence[float]] = None,
     true_ivr_applicable: Optional[Sequence[int]] = None,
     pred_ivr_applicable: Optional[Sequence[int]] = None,
 ) -> None:
@@ -385,6 +433,8 @@ def save_predictions_csv(
         ]
         if pred_ivr_scores is not None:
             fieldnames.append("pred_ivr_score")
+        if pred_ivr_app_probs is not None:
+            fieldnames.append("pred_ivr_app_prob")
         if true_ivr_applicable is not None and pred_ivr_applicable is not None:
             fieldnames.extend(
                 [
@@ -401,6 +451,8 @@ def save_predictions_csv(
         fieldnames = ["photo_cod", "image_path", "true_ivr", "pred_ivr", "abs_err_ivr"]
         if pred_ivr_scores is not None:
             fieldnames.append("pred_ivr_score")
+        if pred_ivr_app_probs is not None:
+            fieldnames.append("pred_ivr_app_prob")
         if true_ivr_applicable is not None and pred_ivr_applicable is not None:
             fieldnames.extend(
                 [
@@ -434,6 +486,8 @@ def save_predictions_csv(
                 row["abs_err_ivr"] = abs(pred_ivr - true_ivr)
                 if pred_ivr_scores is not None:
                     row["pred_ivr_score"] = float(pred_ivr_scores[i])
+                if pred_ivr_app_probs is not None:
+                    row["pred_ivr_app_prob"] = float(pred_ivr_app_probs[i])
                 if true_ivr_applicable is not None and pred_ivr_applicable is not None:
                     row["true_ivr_applicable"] = int(true_ivr_applicable[i])
                     row["pred_ivr_applicable"] = int(pred_ivr_applicable[i])
@@ -451,6 +505,8 @@ def save_predictions_csv(
                 row["abs_err_ivr"] = abs(pred_ivr - true_ivr)
                 if pred_ivr_scores is not None:
                     row["pred_ivr_score"] = float(pred_ivr_scores[i])
+                if pred_ivr_app_probs is not None:
+                    row["pred_ivr_app_prob"] = float(pred_ivr_app_probs[i])
                 if true_ivr_applicable is not None and pred_ivr_applicable is not None:
                     row["true_ivr_applicable"] = int(true_ivr_applicable[i])
                     row["pred_ivr_applicable"] = int(pred_ivr_applicable[i])
@@ -693,10 +749,11 @@ def main() -> None:
         raise ValueError(f"Target no soportado: {target_name}")
 
     head_type = str(config.get("head_type", ""))
-    if head_type not in {"ordinal_coral", "hpi_coral_ivr_score"}:
+    if head_type not in {"ordinal_coral", "hpi_coral_ivr_score", "hpi_coral_ivr_dual"}:
         raise RuntimeError(
             "Esta version de 10_test_cnn.py solo soporta "
-            "head_type=ordinal_coral o head_type=hpi_coral_ivr_score."
+            "head_type=ordinal_coral, head_type=hpi_coral_ivr_score "
+            "o head_type=hpi_coral_ivr_dual."
         )
 
     num_classes_hpi = int(config.get("num_classes_hpi", 0))
@@ -715,6 +772,7 @@ def main() -> None:
         )
     ivr_score_targets = parse_ivr_score_targets(config.get("ivr_score_targets", []))
     ivr_score_hpi_gate = bool(config.get("ivr_score_hpi_gate_at_inference", True))
+    ivr_app_threshold = float(config.get("ivr_app_threshold", 0.5))
     use_ivr_coarse_fine = bool(config.get("use_ivr_coarse_fine_effective", False))
     ivr_coarse_bins = parse_bins_from_config(config.get("ivr_coarse_bins_effective", []))
     if use_ivr_coarse_fine and not ivr_coarse_bins:
@@ -762,6 +820,7 @@ def main() -> None:
     y_true_parts: list[torch.Tensor] = []
     y_pred_parts: list[torch.Tensor] = []
     pred_ivr_score_parts: list[torch.Tensor] = []
+    pred_ivr_app_prob_parts: list[torch.Tensor] = []
     photo_codes: list[str] = []
     image_paths: list[str] = []
 
@@ -779,14 +838,20 @@ def main() -> None:
                 ivr_coarse_bins=ivr_coarse_bins,
                 ivr_score_targets=ivr_score_targets,
                 ivr_score_hpi_gate=ivr_score_hpi_gate,
+                ivr_app_threshold=ivr_app_threshold,
             )
             pred_ivr_scores = extract_pred_ivr_scores(
+                logits, head_type, target_name, num_classes_hpi
+            )
+            pred_ivr_app_probs = extract_pred_ivr_app_probs(
                 logits, head_type, target_name, num_classes_hpi
             )
             y_true_parts.append(y)
             y_pred_parts.append(pred)
             if pred_ivr_scores is not None:
                 pred_ivr_score_parts.append(pred_ivr_scores)
+            if pred_ivr_app_probs is not None:
+                pred_ivr_app_prob_parts.append(pred_ivr_app_probs)
             photo_codes.extend(batch_codes)
             image_paths.extend(batch_paths)
 
@@ -794,6 +859,9 @@ def main() -> None:
     y_pred = torch.cat(y_pred_parts, dim=0).to(torch.int64)
     pred_ivr_scores_all = (
         torch.cat(pred_ivr_score_parts, dim=0) if pred_ivr_score_parts else None
+    )
+    pred_ivr_app_probs_all = (
+        torch.cat(pred_ivr_app_prob_parts, dim=0) if pred_ivr_app_prob_parts else None
     )
 
     abs_err_disc = (y_pred - y_true).abs()
@@ -1004,6 +1072,11 @@ def main() -> None:
         pred_ivr_scores=(
             pred_ivr_scores_all.tolist() if pred_ivr_scores_all is not None else None
         ),
+        pred_ivr_app_probs=(
+            pred_ivr_app_probs_all.tolist()
+            if pred_ivr_app_probs_all is not None
+            else None
+        ),
         true_ivr_applicable=true_ivr_applicable_csv,
         pred_ivr_applicable=pred_ivr_applicable_csv,
     )
@@ -1056,6 +1129,7 @@ def main() -> None:
                         ivr_coarse_bins=ivr_coarse_bins,
                         ivr_score_targets=ivr_score_targets,
                         ivr_score_hpi_gate=ivr_score_hpi_gate,
+                        ivr_app_threshold=ivr_app_threshold,
                         pred_hpi=pred_hpi,
                         pred_ivr=pred_ivr,
                         true_hpi=true_hpi,
@@ -1084,6 +1158,7 @@ def main() -> None:
         "ivr_grouping_class_labels": ivr_grouping_class_labels,
         "ivr_score_targets": ivr_score_targets,
         "ivr_score_hpi_gate_at_inference": ivr_score_hpi_gate,
+        "ivr_app_threshold": ivr_app_threshold,
         "use_ivr_coarse_fine_effective": use_ivr_coarse_fine,
         "ivr_coarse_bins_effective": ivr_coarse_bins,
         "n_test_samples": len(test_ds),
@@ -1116,6 +1191,19 @@ def main() -> None:
                 None
                 if pred_ivr_scores_all is None
                 else float(pred_ivr_scores_all.std(unbiased=False).item())
+            ),
+        },
+        "legacy_ivr_applicability_head": {
+            "available": pred_ivr_app_probs_all is not None,
+            "pred_mean": (
+                None
+                if pred_ivr_app_probs_all is None
+                else float(pred_ivr_app_probs_all.mean().item())
+            ),
+            "pred_std": (
+                None
+                if pred_ivr_app_probs_all is None
+                else float(pred_ivr_app_probs_all.std(unbiased=False).item())
             ),
         },
         "5_plots": {

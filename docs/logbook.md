@@ -306,3 +306,29 @@ Se refactorizó también `10_test_cnn.py` para que la evaluación sirva tanto pa
 La idea de este cambio de test es que, si una muestra real debería tener `IVR=0` y el modelo no predice `HPI` en `0/5/6`, el error que aparece en `IVR` no debe leerse automáticamente como un fallo puro de la cabeza de `IVR`, porque muchas veces es un error arrastrado por `HPI`. Separar aplicabilidad y nota hace la lectura bastante más justa.
 
 Nota de limpieza de dataset: se revisó la consistencia de la regla `HPI in {0,5,6} => IVR=0` y aparecieron solo 4 incumplimientos (`VI2078`, `VI3010`, `VI4322`, `VI4337`). Se eliminaron del `dataset`, de `cnn/manifest.csv`, de los `splits` afectados y también sus imágenes en `out/` y `out_img_norm/`.
+
+2026-05-22
+Comparativa breve entre la baseline `9_weighted_0307_cnvnxt_es` y la nueva `14_hpi_coral_ivr_mixed`:
+1. La baseline `9` sigue siendo mejor en rendimiento global:
+- `mae_hpi`: `0.5567` vs `0.5940`
+- `mae_ivr` legacy: `1.8250` vs `1.9770`
+- `mae_mean_legacy`: `1.1908` vs `1.2855`
+2. La `14` sí mejora la coherencia estructural del problema:
+- `consistency HPI-IVR`: `1.0000` frente a `0.9168` de la baseline
+- además reduce falsos positivos de aplicabilidad de `IVR`
+3. Sin embargo, esa ganancia viene a costa de perder recall en la aplicabilidad de `IVR` (`0.8018` frente a `0.9392`), así que deja más casos válidos sin nota.
+4. Dentro de los casos donde sí predice que `IVR` aplica, la `14` no mejora claramente el error medio (`mae` condicional casi igual), aunque sí baja algo el `RMSE`, o sea reduce parte de los errores más grandes.
+5. Conclusión: la idea nueva de separar mejor la semántica de `IVR` parece correcta, y el test nuevo ayuda a verla mejor, pero la implementación actual sigue dependiendo demasiado de `HPI` para decidir si `IVR` aplica. Por eso la `14` no sustituye a la `9` como baseline principal; queda más bien como experimento útil para entender el problema y orientar el siguiente paso.
+
+2026-05-22 (parte 2)
+Se implementa una nueva variante en `15_hpi_coral_ivr_dual.py` para evitar que `IVR` dependa directamente de `HPI` en inferencia:
+1. `HPI` se mantiene exactamente igual que en `09_train_ordinal.py`.
+2. `IVR` pasa a tener dos cabezas separadas:
+- una cabeza binaria de aplicabilidad (`IVR=0` frente a `IVR in 1..7`)
+- una cabeza continua de score para estimar la nota `1..7` cuando `IVR` aplica
+3. En inferencia, la cabeza binaria decide primero si `IVR` aplica. Si no aplica, `pred_ivr=0`; si aplica, el score continuo se discretiza a la clase experta más cercana entre `1..7`.
+4. La justificación es separar explícitamente los dos problemas reales de `IVR`:
+- decidir si hay que poner nota o no
+- decidir qué nota poner cuando sí hay que ponerla
+5. Con esto se busca que el modelo deje de usar `HPI` como único interruptor de `IVR`, porque en la variante anterior eso mejoraba coherencia, pero también introducía demasiados falsos negativos en la aplicabilidad de `IVR`.
+6. Se adaptaron también `10_test_cnn.py` y `11_heatmap_cnn.py` para soportar esta nueva cabeza dual.
