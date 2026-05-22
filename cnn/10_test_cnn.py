@@ -1016,63 +1016,60 @@ def main() -> None:
     heatmap_limit = max(int(args.heatmap_limit), 0)
 
     if heatmap_limit > 0:
-        if head_type != "ordinal_coral":
-            heatmap_error = (
-                "Heatmaps no implementados para head_type=hpi_coral_ivr_score."
-            )
-            print(f"Aviso: {heatmap_error}")
-        else:
-            try:
-                heatmap_module = load_heatmap_module()
-                shutil.rmtree(heatmap_dir, ignore_errors=True)
-                heatmap_manifest_path.unlink(missing_ok=True)
-                for idx, (photo_code, image_path) in enumerate(zip(photo_codes, image_paths)):
-                    if idx >= heatmap_limit:
-                        break
-                    true_hpi = None
-                    true_ivr = None
-                    pred_hpi = None
-                    pred_ivr = None
-                    if target_name == "both":
-                        true_hpi = int(y_true[idx, 0].item())
-                        true_ivr = int(y_true[idx, 1].item())
-                        pred_hpi = int(y_pred[idx, 0].item())
-                        pred_ivr = int(y_pred[idx, 1].item())
-                    elif target_name == "hpi":
-                        true_hpi = int(y_true[idx, 0].item())
-                        pred_hpi = int(y_pred[idx, 0].item())
-                    else:
-                        true_ivr = int(y_true[idx, 0].item())
-                        pred_ivr = int(y_pred[idx, 0].item())
+        try:
+            heatmap_module = load_heatmap_module()
+            shutil.rmtree(heatmap_dir, ignore_errors=True)
+            heatmap_manifest_path.unlink(missing_ok=True)
+            for idx, (photo_code, image_path) in enumerate(zip(photo_codes, image_paths)):
+                if idx >= heatmap_limit:
+                    break
+                true_hpi = None
+                true_ivr = None
+                pred_hpi = None
+                pred_ivr = None
+                if target_name == "both":
+                    true_hpi = int(y_true[idx, 0].item())
+                    true_ivr = int(y_true[idx, 1].item())
+                    pred_hpi = int(y_pred[idx, 0].item())
+                    pred_ivr = int(y_pred[idx, 1].item())
+                elif target_name == "hpi":
+                    true_hpi = int(y_true[idx, 0].item())
+                    pred_hpi = int(y_pred[idx, 0].item())
+                else:
+                    true_ivr = int(y_true[idx, 0].item())
+                    pred_ivr = int(y_pred[idx, 0].item())
 
-                    heatmap_records.extend(
-                        heatmap_module.save_prediction_heatmaps(
-                            model=model,
-                            model_name=model_name,
-                            image_path=image_path,
-                            photo_code=photo_code,
-                            target=target_name,
-                            img_size=img_size,
-                            device=device,
-                            output_dir=heatmap_dir,
-                            num_classes_hpi=num_classes_hpi,
-                            num_classes_ivr=num_classes_ivr,
-                            use_ivr_coarse_fine=use_ivr_coarse_fine,
-                            ivr_coarse_bins=ivr_coarse_bins,
-                            pred_hpi=pred_hpi,
-                            pred_ivr=pred_ivr,
-                            true_hpi=true_hpi,
-                            true_ivr=true_ivr,
-                        )
+                heatmap_records.extend(
+                    heatmap_module.save_prediction_heatmaps(
+                        model=model,
+                        model_name=model_name,
+                        head_type=head_type,
+                        image_path=image_path,
+                        photo_code=photo_code,
+                        target=target_name,
+                        img_size=img_size,
+                        device=device,
+                        output_dir=heatmap_dir,
+                        num_classes_hpi=num_classes_hpi,
+                        num_classes_ivr=num_classes_ivr,
+                        use_ivr_coarse_fine=use_ivr_coarse_fine,
+                        ivr_coarse_bins=ivr_coarse_bins,
+                        ivr_score_targets=ivr_score_targets,
+                        ivr_score_hpi_gate=ivr_score_hpi_gate,
+                        pred_hpi=pred_hpi,
+                        pred_ivr=pred_ivr,
+                        true_hpi=true_hpi,
+                        true_ivr=true_ivr,
                     )
-                    if (idx + 1) % 50 == 0 or (idx + 1) == heatmap_limit:
-                        print(f"Heatmaps: {idx + 1}/{heatmap_limit}")
+                )
+                if (idx + 1) % 50 == 0 or (idx + 1) == heatmap_limit:
+                    print(f"Heatmaps: {idx + 1}/{heatmap_limit}")
 
-                if heatmap_records:
-                    save_heatmap_manifest_csv(heatmap_manifest_path, heatmap_records)
-            except Exception as exc:
-                heatmap_error = str(exc)
-                print(f"Aviso: no se pudieron generar heatmaps ({exc})")
+            if heatmap_records:
+                save_heatmap_manifest_csv(heatmap_manifest_path, heatmap_records)
+        except Exception as exc:
+            heatmap_error = str(exc)
+            print(f"Aviso: no se pudieron generar heatmaps ({exc})")
 
     metrics = {
         "run_dir": str(run_dir),

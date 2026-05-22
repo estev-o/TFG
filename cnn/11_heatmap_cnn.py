@@ -69,7 +69,17 @@ def resolve_run_dir(run_dir: Path) -> Path:
     )
 
 
-def output_dim_for_target(target: str, num_classes_hpi: int, num_classes_ivr: int) -> int:
+def output_dim_for_target(
+    head_type: str, target: str, num_classes_hpi: int, num_classes_ivr: int
+) -> int:
+    if head_type == "hpi_coral_ivr_score":
+        if target == "both":
+            return num_classes_hpi
+        if target == "hpi":
+            return num_classes_hpi - 1
+        raise ValueError(
+            "La variante hpi_coral_ivr_score no soporta target=ivr en heatmaps."
+        )
     if target == "both":
         return (num_classes_hpi - 1) + (num_classes_ivr - 1)
     if target == "hpi":
@@ -162,6 +172,57 @@ def remap_raw_ivr_label(
         if start <= raw_ivr <= end:
             return group_idx
     raise ValueError(f"{field} fuera de los bins de agrupacion IVR: {raw_ivr}")
+
+
+def parse_ivr_score_targets(raw: Any) -> dict[int, float]:
+    if raw is None:
+        return {}
+    if isinstance(raw, dict):
+        out: dict[int, float] = {}
+        for k, v in raw.items():
+            if v is None:
+                continue
+            out[int(k)] = float(v)
+        return out
+    if isinstance(raw, list):
+        out = {}
+        for idx, value in enumerate(raw):
+            if value is None:
+                continue
+            out[idx] = float(value)
+        return out
+    raise ValueError(f"ivr_score_targets invalido en config: {raw}")
+
+
+def decode_ivr_score_to_class(
+    scores: torch.Tensor,
+    ivr_score_targets: dict[int, float],
+    hpi_pred: Optional[torch.Tensor] = None,
+    use_hpi_gate: bool = True,
+) -> torch.Tensor:
+    anchor_classes_raw = sorted(k for k in ivr_score_targets.keys() if k > 0)
+    if not anchor_classes_raw:
+        raise ValueError("No hay anchors de ivr_score_targets para decodificar IVR score.")
+
+    anchor_classes = torch.tensor(
+        anchor_classes_raw,
+        device=scores.device,
+        dtype=torch.int64,
+    )
+    anchor_scores = torch.tensor(
+        [ivr_score_targets[k] for k in anchor_classes_raw],
+        device=scores.device,
+        dtype=scores.dtype,
+    )
+    pred = torch.zeros(scores.shape[0], device=scores.device, dtype=torch.int64)
+    valid_mask = torch.ones(scores.shape[0], device=scores.device, dtype=torch.bool)
+    if use_hpi_gate and hpi_pred is not None:
+        valid_mask = (hpi_pred > 0) & (hpi_pred < 5)
+    if valid_mask.any():
+        distances = (scores[valid_mask].unsqueeze(1) - anchor_scores.unsqueeze(0)).abs()
+        idx = distances.argmin(dim=1)
+        pred[valid_mask] = anchor_classes[idx]
+    return pred
 
 
 def ordinal_score_for_class(logits: torch.Tensor, class_idx: int) -> torch.Tensor:
@@ -269,6 +330,7 @@ def build_panel(original: Image.Image, overlay: Image.Image) -> Image.Image:
 def save_prediction_heatmaps(
     model: nn.Module,
     model_name: str,
+    head_type: str,
     image_path: str,
     photo_code: str,
     target: str,
@@ -279,6 +341,8 @@ def save_prediction_heatmaps(
     num_classes_ivr: int,
     use_ivr_coarse_fine: bool = False,
     ivr_coarse_bins: Optional[Sequence[tuple[int, int]]] = None,
+    ivr_score_targets: Optional[dict[int, float]] = None,
+    ivr_score_hpi_gate: bool = True,
     pred_hpi: Optional[int] = None,
     pred_ivr: Optional[int] = None,
     true_hpi: Optional[int] = None,
@@ -300,23 +364,11 @@ def save_prediction_heatmaps(
             if target == "both":
                 hpi_dim = num_classes_hpi - 1
                 hpi_logits = logits[:, :hpi_dim]
-                ivr_logits = logits[:, hpi_dim:]
                 pred_hpi_effective = (
                     int(decode_ordinal_logits(hpi_logits)[0].item())
                     if pred_hpi is None
                     else int(pred_hpi)
                 )
-                if pred_ivr is None:
-                    if use_ivr_coarse_fine:
-                        pred_ivr_effective = int(
-                            decode_ivr_with_coarse_fine(
-                                ivr_logits, ivr_coarse_bins or []
-                            )[0].item()
-                        )
-                    else:
-                        pred_ivr_effective = int(decode_ordinal_logits(ivr_logits)[0].item())
-                else:
-                    pred_ivr_effective = int(pred_ivr)
 
                 tasks.append(
                     {
@@ -326,14 +378,57 @@ def save_prediction_heatmaps(
                         "score": ordinal_score_for_class(hpi_logits, pred_hpi_effective).sum(),
                     }
                 )
-                tasks.append(
-                    {
-                        "task": "ivr",
-                        "pred_label": pred_ivr_effective,
-                        "true_label": true_ivr,
-                        "score": ordinal_score_for_class(ivr_logits, pred_ivr_effective).sum(),
-                    }
-                )
+                if head_type == "hpi_coral_ivr_score":
+                    ivr_score_logit = logits[:, hpi_dim]
+                    ivr_score_value = torch.sigmoid(ivr_score_logit)
+                    if pred_ivr is None:
+                        pred_ivr_effective = int(
+                            decode_ivr_score_to_class(
+                                ivr_score_value,
+                                ivr_score_targets or {},
+                                hpi_pred=torch.tensor(
+                                    [pred_hpi_effective], device=ivr_score_value.device
+                                ),
+                                use_hpi_gate=ivr_score_hpi_gate,
+                            )[0].item()
+                        )
+                    else:
+                        pred_ivr_effective = int(pred_ivr)
+                    if pred_ivr_effective > 0:
+                        anchor = float((ivr_score_targets or {})[pred_ivr_effective])
+                        tasks.append(
+                            {
+                                "task": "ivr",
+                                "pred_label": pred_ivr_effective,
+                                "true_label": true_ivr,
+                                "score": -((ivr_score_value - anchor) ** 2).sum(),
+                            }
+                        )
+                else:
+                    ivr_logits = logits[:, hpi_dim:]
+                    if pred_ivr is None:
+                        if use_ivr_coarse_fine:
+                            pred_ivr_effective = int(
+                                decode_ivr_with_coarse_fine(
+                                    ivr_logits, ivr_coarse_bins or []
+                                )[0].item()
+                            )
+                        else:
+                            pred_ivr_effective = int(
+                                decode_ordinal_logits(ivr_logits)[0].item()
+                            )
+                    else:
+                        pred_ivr_effective = int(pred_ivr)
+                    tasks.append(
+                        {
+                            "task": "ivr",
+                            "pred_label": pred_ivr_effective,
+                            "true_label": true_ivr,
+                            "score": ordinal_score_for_class(
+                                ivr_logits, pred_ivr_effective
+                            ).sum(),
+                        }
+                    )
             elif target == "hpi":
                 pred_hpi_effective = (
                     int(decode_ordinal_logits(logits)[0].item())
@@ -349,6 +444,10 @@ def save_prediction_heatmaps(
                     }
                 )
             else:
+                if head_type == "hpi_coral_ivr_score":
+                    raise ValueError(
+                        "head_type hpi_coral_ivr_score no soporta target=ivr en heatmaps."
+                    )
                 if pred_ivr is None:
                     if use_ivr_coarse_fine:
                         pred_ivr_effective = int(
@@ -415,13 +514,17 @@ def main() -> None:
     target_name = str(config.get("target", "both")) if args.target == "auto" else args.target
     if target_name not in {"both", "hpi", "ivr"}:
         raise ValueError(f"Target no soportado: {target_name}")
+    head_type = str(config.get("head_type", "ordinal_coral"))
+    if head_type not in {"ordinal_coral", "hpi_coral_ivr_score"}:
+        raise ValueError(f"head_type no soportado en heatmaps: {head_type}")
 
     num_classes_hpi = int(config.get("num_classes_hpi", 0))
     num_classes_ivr = int(config.get("num_classes_ivr", 0))
     if num_classes_hpi < 2 or num_classes_ivr < 2:
         raise ValueError("num_classes_hpi/num_classes_ivr invalidos en config.json")
 
-    ivr_label_mode = str(config.get("ivr_label_mode", "raw_8"))
+    ivr_label_mode_raw = config.get("ivr_label_mode", "raw_8")
+    ivr_label_mode = str(ivr_label_mode_raw) if ivr_label_mode_raw else "raw_8"
     ivr_grouping_bins_raw = parse_bins_from_config(config.get("ivr_grouping_bins_raw", []))
     if ivr_label_mode != "raw_8" and not ivr_grouping_bins_raw:
         raise ValueError(
@@ -429,13 +532,17 @@ def main() -> None:
         )
     use_ivr_coarse_fine = bool(config.get("use_ivr_coarse_fine_effective", False))
     ivr_coarse_bins = parse_bins_from_config(config.get("ivr_coarse_bins_effective", []))
+    ivr_score_targets = parse_ivr_score_targets(config.get("ivr_score_targets", []))
+    ivr_score_hpi_gate = bool(config.get("ivr_score_hpi_gate_at_inference", True))
     img_size = args.img_size if args.img_size > 0 else int(config.get("img_size", 224))
     checkpoint_path = run_dir / args.checkpoint
     if not checkpoint_path.exists():
         raise FileNotFoundError(f"No existe checkpoint: {checkpoint_path}")
 
     device = resolve_device(args.device)
-    output_dim = output_dim_for_target(target_name, num_classes_hpi, num_classes_ivr)
+    output_dim = output_dim_for_target(
+        head_type, target_name, num_classes_hpi, num_classes_ivr
+    )
     model = build_model(model_name, output_dim=output_dim).to(device)
     ckpt = torch.load(checkpoint_path, map_location=device)
     state_dict = ckpt["model_state_dict"] if isinstance(ckpt, dict) and "model_state_dict" in ckpt else ckpt
@@ -449,6 +556,7 @@ def main() -> None:
     records = save_prediction_heatmaps(
         model=model,
         model_name=model_name,
+        head_type=head_type,
         image_path=args.image_path,
         photo_code=args.photo_cod,
         target=target_name,
@@ -459,6 +567,8 @@ def main() -> None:
         num_classes_ivr=num_classes_ivr,
         use_ivr_coarse_fine=use_ivr_coarse_fine,
         ivr_coarse_bins=ivr_coarse_bins,
+        ivr_score_targets=ivr_score_targets,
+        ivr_score_hpi_gate=ivr_score_hpi_gate,
         true_hpi=true_hpi,
         true_ivr=true_ivr,
     )
