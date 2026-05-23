@@ -138,6 +138,7 @@ preparación dos datos, cuestión que se describe con máis detalle na seguinte 
 } % alcance do rowcolors que precede á táboa longa
 
 \section{Descrición das variables obxectivo}
+\label{sec:descricion-variables-obxectivo}
 Para interpretar correctamente as variables empregadas neste traballo utilizouse a documentación
 proporcionada polos expertos xunto co \textit{dataset}, en particular o documento \textit{Script for
 grazing marks.pdf}. Como xa se indicou, seleccionáronse unicamente \gls{hpi} e \gls{ivr} por seren as
@@ -229,25 +230,32 @@ Táboa~\ref{tab:escala-ivr}.
 }
 
 \section{Metodoloxía do traballo}
-Para axilizar o desarrollo, dividiuse o traballo en varias etapas ata chegar a integración de todo o fluxo nun pipeline usable para os 
-expertos, o cal era o obexctivo inicial. Para traballar de forma ordeada, empregouse git (a través de GitHub) para control de versións. De esta forma 
-o código non estaba separado
+O desenvolvemento deste traballo estruturouse en varias fases sucesivas, co obxectivo de construír
+un sistema capaz de asistir aos expertos na avaliación do dano por herbivoría en algas laminarias a
+partir de imaxes. Esta organización permitiu abordar o problema de maneira progresiva, partindo da
+análise dos datos dispoñibles e avanzando cara á construción dunha solución integrada.
 
-\subsection{Preprocesado de datos}
+\begin{enumerate}
+    \item \textbf{Análise inicial do material dispoñible.} Nunha primeira fase revisáronse as
+    imaxes, o ficheiro de etiquetas e a documentación proporcionada polos expertos, co fin de
+    comprender a natureza do problema e identificar as variables máis relevantes para o sistema.
 
-\textcolor{red}{\textbf{TODO: Como procesei o CSV, como filtrei imaxes que non tiñan entrada no CSV, imaxes que incumplían as regras REVISIÓN, ESTO MELLOR NO SEGUINTE CAPÍTULO.}}
+    \item \textbf{Selección das variables obxectivo.} A partir desta análise seleccionáronse as
+    variables \gls{hpi} e \gls{ivr}, por seren as máis adecuadas para representar, respectivamente,
+    o nivel de dano observado e a posible procedencia da depredación.
 
-\subsection{Detección de alga en imaxes}
-\textcolor{red}{\textbf{TODO: Comentar como tratei de usar OpenCV orixinalmente, cambiando a YOLO REVISIÓN, ESTO MELLOR POÑELO NO SEGUINTE CAPÍTULO.}}
+    \item \textbf{Preparación dos datos.} Nunha terceira fase abordouse a organización e preparación
+    do conxunto de datos, prestando especial atención á variabilidade das imaxes e á necesidade de
+    establecer un conxunto de entrada consistente para o desenvolvemento posterior do sistema.
 
-\subsection{Normalización de imaxes de algas}
+    \item \textbf{Deseño da estratexia de procesado.} Posteriormente formulouse unha estratexia de
+    análise dividida en varias etapas complementarias: localización da alga na imaxe, preparación da
+    rexión de interese e estimación das variables obxectivo a partir da información visual.
 
-\subsection{Adestramento de CNN}
+    \item \textbf{Integración da solución final.} Finalmente, os distintos compoñentes desenvolvidos
+    integráronse nun fluxo de traballo unificado orientado ao seu uso como ferramenta de apoio á
+    decisión por parte dos expertos.
+\end{enumerate}
 
-\subsection{Integración da pipeline nun programa informático}
-
-
-
-\section{Arquitectura do pipeline}
-\textcolor{red}{\textbf{TODO: Presentar a estrutura xeral do sistema, indicando as etapas principais,
-como a detección da alga, o tratamento da rexión de interese e a estimación das variables obxectivo. Facer un diagrama ou algo así}}
+Os detalles técnicos asociados a cada unha destas fases descríbense no capítulo seguinte, dedicado ao
+desenvolvemento da solución proposta.

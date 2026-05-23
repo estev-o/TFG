@@ -1,0 +1,92 @@
+\chapter{Desenvolvemento da solución}
+\label{chap:desenvolvemento-solucion}
+
+Neste capítulo descríbense os aspectos técnicos da solución desenvolvida, detallando as decisións de
+implementación adoptadas en cada etapa do sistema. En particular, abórdase o preprocesado dos datos,
+a detección das algas nas imaxes, a normalización das mostras, a arquitectura e o adestramento do
+modelo de inferencia e a integración final de todo o fluxo nun programa informático.
+
+\section{Preprocesado de datos}
+O primeiro paso da solución consistiu en depurar o \textit{dataset} inicial para reducir a
+variabilidade introducida por erros ou inconsistencias básicas nos datos. Para iso desenvolveuse un
+\textit{script} en Python, denominado \texttt{01\_script\_filtro.py}, orientado a simplificar o
+ficheiro de etiquetas, validar o formato das variables de interese e eliminar imaxes que non puidesen
+ser empregadas nas etapas posteriores do pipeline. Ademais da execución deste \textit{script},
+realizouse unha revisión posterior adicional baseada en criterios proporcionados polos expertos.
+
+\subsection{\textit{Script} de limpeza}
+\subsubsection{Entrada}
+O \textit{script} parte de dúas fontes de datos definidas previamente no proxecto:
+\begin{itemize}
+    \item O ficheiro Excel orixinal proporcionado polos expertos, no que se almacenaban as etiquetas asociadas ás mostras.
+    \item A carpeta coas imaxes correspondentes ao \textit{dataset}.
+\end{itemize}
+De maneira opcional, o programa admite o argumento \texttt{--dry-run}, que permite simular a
+limpeza das imaxes sen realizar modificacións sobre os ficheiros.
+
+\subsubsection{Procesado}
+En primeiro lugar, compróbase a existencia do ficheiro Excel e procédese á súa lectura mediante
+\texttt{pandas}. Unha vez cargado, selecciónanse unicamente as tres columnas relevantes para o
+problema abordado: \texttt{Photo\_cod}, \texttt{HPI} e \texttt{IVR}. Esta redución permitiu
+traballar só cos metadatos estritamente necesarios para a tarefa de inferencia.
+
+Posteriormente, as variables \texttt{HPI} e \texttt{IVR} convértense a formato numérico. As filas
+nas que algunha destas etiquetas non puido interpretarse correctamente elimínanse do conxunto de
+datos. Ademais, verificouse que ambos os dous valores fosen enteiros, xa que representan niveis
+ordinais e, polo tanto, non tería sentido manter rexistros con valores decimais.
+
+Como parte final desta etapa, revisouse a carpeta de imaxes para detectar ficheiros sen referencia
+válida no ficheiro das táboas. As imaxes cuxo identificador non aparecía en \texttt{Photo\_cod}
+elimináronse, posto que non podían utilizarse no adestramento nin na avaliación do modelo.
+
+\subsubsection{Saída}
+Como resultado, xeráronse dous ficheiros de saída, en formato CSV e Excel, contendo exclusivamente
+as columnas \texttt{Photo\_cod}, \texttt{HPI} e \texttt{IVR}. Esta etapa garantiu que as imaxes
+conservadas no repositorio dispoñían dunha referencia válida no ficheiro de etiquetas. Cómpre
+indicar, porén, que esta comprobación só se aplicou nese sentido. Non se eliminaban automaticamente
+as filas do ficheiro de táboas cuxa imaxe asociada non estivese presente na carpeta. Esta limitación
+foi tida en conta durante a análise e retómase nas conclusións como posible mellora do pipeline.
+
+\subsection{Resultado da execución}
+Tras executar o \textit{script} sobre o \textit{dataset} inicial, composto por 5490 filas no
+ficheiro Excel e 4984 imaxes, obtívose o seguinte resultado:
+\begin{itemize}
+    \item Elimináronse 4 filas con valores non numéricos en \texttt{HPI} ou \texttt{IVR} (por exemplo, \texttt{o}, \texttt{O} ou \texttt{NaN}).
+    \item Elimináronse 7 imaxes por non teren correspondencia válida no ficheiro tabular.
+\end{itemize}
+
+\subsection{Poda posterior e conclusión}
+Despois desta limpeza inicial, aplicouse unha poda adicional para asegurar o cumprimento das regras
+de etiquetado establecidas polos expertos. Esta revisión permitiu detectar 4 casos que incumprían
+ditos criterios, descritos na
+Sección-\ref{sec:descricion-variables-obxectivo}, polo que foron eliminados tanto do conxunto de
+imaxes coma dos ficheiros finais de etiquetas.
+
+En conxunto, esta fase de preprocesado permitiu partir dun conxunto de datos máis consistente e
+axeitado para o resto do traballo. Aínda que o volume de rexistros descartados non foi elevado, a
+limpeza resultou necesaria para evitar que erros de formato ou mostras sen utilidade condicionasen
+as etapas posteriores de detección, normalización e inferencia. Tras esta etapa, o conxunto final
+quedou composto por 4977 imaxes e 5486 rexistros tabulares.
+
+\textcolor{red}{\textbf{TODO: Engadir nas conclusións que non se borraron as filas no csv que non tiñan referencia a imaxes, pero esto non tivo un impacto real 
+en ningunha execución, só sería por perfeccionismo. Ademási comentar que inicialmente non se trataron as imaxes con HPI=0 e IVR=0 (1369)}}
+
+%QUEDEI AQUÍ
+
+\section{Detección de alga en imaxes}
+\textcolor{red}{\textbf{TODO: Explicar o enfoque empregado para localizar a alga nas imaxes e a
+motivación da solución finalmente adoptada, comentar openCV pimeiro e pivote a YOLO. VOLVER CORRER O SCRIPT DE openCV
+PARA DAR VARIOS EXEMPLOS DE MALOS RECORTES. COMENTAR QUE NON EXISTEN MÉTRICAS PORQUE OS FALLOS ERAN EVIDENTES SÓ CON VER O DATASET SEGMENTADO
+QUE HABERÍA UN 40\% MAIS OU MENOS DE ACERTOS.}}
+
+\section{Normalización de imaxes de algas}
+\textcolor{red}{\textbf{TODO: Detallar o proceso de recorte, limpeza e normalización das imaxes antes
+da súa entrada ao modelo de inferencia.}}
+
+\section{Arquitectura e adestramento da CNN}
+\textcolor{red}{\textbf{TODO: Describir a arquitectura empregada, o procedemento de adestramento e os
+criterios seguidos para avaliar o modelo.}}
+
+\section{Integración da pipeline nun programa informático}
+\textcolor{red}{\textbf{TODO: Explicar como se integraron os distintos compoñentes nunha ferramenta
+usable polos expertos.}}
