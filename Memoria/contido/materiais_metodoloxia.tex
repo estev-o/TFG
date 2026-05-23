@@ -7,26 +7,247 @@ preprocesado aplicados ás imaxes, a estrutura xeral do pipeline deseñado e a c
 experimental empregada para avaliar o comportamento do sistema.
 
 \section{Conxunto de datos}
-O \textit{dataset} empregado para este traballo foi cedido polo  \textcolor{red}{\textbf{TODO: Preguntar qué departamento en específico nolo cedeu.}}.
-Este conxunto componse de 4704 imaxes de algas \gls{kelp}, que, como xa se mencionou en **METER REFERENCIA A ACHEGAMENTO DO PROBLEMA**, teñen unha 
-amplia variabilidade de captura. 
+O \textit{dataset} empregado para este traballo foi cedido polo \textcolor{red}{\textbf{TODO: Preguntar que departamento en específico nolo cedeu.}}.
+Este conxunto componse de 4704 imaxes de algas \gls{kelp}, que, como xa se mencionou na sección de
+achegamento do problema na introdución \ref{chap:introducion}, presentan unha ampla variabilidade de captura. Esta heteroxeneidade afecta
+tanto ás condicións de iluminación e ao fondo como á presenza de elementos auxiliares e anotacións
+visibles na escena. Na Figura~\ref{fig:variabilidade-dataset} móstranse varios exemplos
+representativos desta variabilidade. As imaxes tamén presentaban diferenzas de formato e tamaño, xa
+que se atoparon ficheiros en formatos .JPG, .JPEG, .PNG e .HEIC.
 
-\section{Etiquetado e variables de interese}
-\textcolor{red}{\textbf{TODO: Explicar o significado de HPI e IVR, a interpretación dos seus valores
-e a súa relevancia para o problema estudado.}}
+\begin{figure}[htbp]
+    \centering
+    \begin{subfigure}[t]{0.48\textwidth}
+        \centering
+        \includegraphics[width=\textwidth]{imaxes/Alga_reflexos_sombras_anotacios_verdes_regla_dourada.JPEG}
+        \caption{Reflexos, sombras, anotacións verdes e regra dourada.}
+    \end{subfigure}
+    \hfill
+    \begin{subfigure}[t]{0.48\textwidth}
+        \centering
+        \includegraphics[width=\textwidth]{imaxes/Alga_fondo_linea_mesa_letras_vermellas.JPG}
+        \caption{Fondo visible, liña de separación entre mesas e letras vermellas.}
+    \end{subfigure}
 
-\section{Preprocesado das imaxes}
-\textcolor{red}{\textbf{TODO: Detallar os pasos de normalización, limpeza e transformación aplicados
-ás imaxes antes da inferencia.}}
+    \vspace{0.5em}
+
+    \begin{subfigure}[t]{0.48\textwidth}
+        \centering
+        \includegraphics[width=\textwidth]{imaxes/Alga_cinta_metrica.JPG}
+        \caption{Presenza dunha cinta métrica como referencia de escala.}
+    \end{subfigure}
+    \hfill
+    \begin{subfigure}[t]{0.48\textwidth}
+        \centering
+        \includegraphics[width=\textwidth]{imaxes/Alga_iluminacion_distinta_letras_negras.JPEG}
+        \caption{Iluminación diferente e anotacións en letras negras.}
+    \end{subfigure}
+    \caption{Exemplos de variabilidade presente nas imaxes do \textit{dataset}. Obsérvanse diferenzas
+    de iluminación, sombras, fondo non uniforme, elementos de referencia e anotacións visuais que
+    condicionan o preprocesado posterior.}
+    \label{fig:variabilidade-dataset}
+\end{figure}
+
+O \textit{dataset} utilízase como base para o adestramento dos modelos que formarán parte do
+\textit{pipeline} final. En particular, emprégase para adestrar un modelo YOLO orientado á detección
+das algas en novas imaxes capturadas polos expertos. Así mesmo, o conxunto de datos serve para
+probar a normalización das imaxes antes do seu procesado pola CNN e, finalmente, para adestrar a
+propia CNN encargada de realizar a inferencia sobre as imaxes de entrada. Para este fin, o tamaño do
+\textit{dataset}, malia a súa variabilidade, resulta axeitado para as necesidades do sistema
+proposto.
+
+Adicionalmente, o conxunto de datos incluía un ficheiro en formato .CSV no que se recompilaba a
+información asociada a cada alga fotografada. Este ficheiro incorporaba campos de identificación,
+contexto temporal e espacial, medidas morfolóxicas e variables de avaliación biolóxica. Entre estes
+campos atopábanse, por exemplo, o identificador da fotografía (\textit{Photo\_cod}), a estación e a
+data de recollida, o lugar da mostraxe, distintas medidas biométricas e as variables de interese
+\gls{hpi} e \gls{ivr}. Porén, para o desenvolvemento deste traballo empregáronse unicamente os campos
+\textit{Photo\_cod}, \gls{hpi} e \gls{ivr}, ao seren os necesarios para relacionar cada imaxe coas
+etiquetas obxectivo do sistema.
+
+Xunto con este ficheiro tamén se proporcionou o documento \textit{Script for grazing marks.pdf}, no
+que se detallaba o significado das variables \gls{hpi} e \gls{ivr} e o procedemento seguido polos
+expertos para asignar unha puntuación a cada alga. Esta documentación resultou clave para interpretar
+correctamente as etiquetas dispoñibles e para establecer os criterios empregados no proceso de
+preparación dos datos, cuestión que se describe con máis detalle na seguinte sección.
+
+{\rowcolors{2}{white}{udcgray!25}
+\footnotesize
+\setlength{\tabcolsep}{3pt}
+\begin{longtable}{p{0.20\textwidth}|p{0.19\textwidth}|p{0.33\textwidth}}
+    \caption{Campos presentes no ficheiro .CSV asociado ao conxunto de datos.}
+    \label{tab:variables-csv} \\
+
+    \rowcolor{udcpink!25}
+    \textbf{Campo} & \textbf{Tipo} & \textbf{Descrición} \\\hline
+    \endfirsthead
+
+    \multicolumn{3}{c}{\tablename\ \thetable{} -- {\small \textit{(vén da páxina anterior)}}} \\
+    \rowcolor{udcpink!25}
+    \textbf{Campo} & \textbf{Tipo} & \textbf{Descrición} \\\hline
+    \endhead
+
+    \multicolumn{3}{c}{\dotfill{\small \textit{(continúa na páxina seguinte)}}\dotfill} \\
+    \endfoot
+
+    \endlastfoot
+
+    \rowcolor{udcpink!25}
+    \multicolumn{3}{c}{\textbf{Identificación e contexto de mostraxe}} \\\hline
+    \textit{Photo\_cod} & Identificación da fotografía & Identificador asociado a cada imaxe do conxunto de datos. \\
+    \textit{Season} & Contexto temporal & Estación do ano na que se realizou a recollida. \\
+    \textit{Date} & Contexto temporal & Data de captura ou recollida da mostra. \\
+    \textit{Site} & Contexto espacial & Nome do lugar de mostraxe. \\
+    \textit{Site cod} & Contexto espacial & Código abreviado do lugar de mostraxe. \\
+    \textit{Species} & Información taxonómica & Especie rexistrada para a mostra. \\
+
+    \rowcolor{udcpink!25}
+    \multicolumn{3}{c}{\textbf{Medidas biométricas e morfolóxicas}} \\\hline
+    \textit{TW (g)} & Medida biométrica & Peso total da mostra. \\
+    \textit{LWE (g)} & Medida biométrica & Medida de peso específica rexistrada polos expertos. \\
+    \textit{SWE (g)} & Medida biométrica & Medida de peso específica rexistrada polos expertos. \\
+    \textit{HWE (g)} & Medida biométrica & Medida de peso específica rexistrada polos expertos. \\
+    \textit{HBL (cm)} & Medida morfolóxica & Lonxitude rexistrada da alga. \\
+    \textit{HW (cm)} & Medida morfolóxica & Anchura rexistrada da alga. \\
+    \textit{HH (cm)} & Medida morfolóxica & Altura rexistrada da alga. \\
+    \textit{SD1 (mm)} & Medida morfolóxica & Distancia ou diámetro específico anotado no CSV. \\
+    \textit{SD2 (mm)} & Medida morfolóxica & Distancia ou diámetro específico anotado no CSV. \\
+    \textit{LT (mm)} & Medida morfolóxica & Medida lineal rexistrada polos expertos. \\
+    \textit{RAM (nº)} & Conteo morfolóxico & Número de ramificacións ou estruturas asociadas. \\
+    \textit{Age} & Característica biolóxica & Idade rexistrada da mostra. \\
+    \textit{TL (cm)} & Medida morfolóxica & Medida lineal rexistrada polos expertos. \\
+    \textit{LL (cm)} & Medida morfolóxica & Medida lineal rexistrada polos expertos. \\
+    \textit{SL (cm)} & Medida morfolóxica & Medida lineal rexistrada polos expertos. \\
+    \textit{LW (cm)} & Medida morfolóxica & Medida lineal rexistrada polos expertos. \\
+    \textit{LA (cm2)} & Medida superficial & Área rexistrada da alga. \\
+    \textit{SA (cm2)} & Medida superficial & Área rexistrada polos expertos. \\
+
+    \rowcolor{udcpink!25}
+    \multicolumn{3}{c}{\textbf{Variables auxiliares de caracterización}} \\\hline
+    \textit{Recluta(0)/No Recluta(1)} & Clasificación binaria & Indica se a mostra foi clasificada como recruta. \\
+    \textit{Soros 1(1)/0(0)} & Clasificación binaria & Presenza ou ausencia de soros. \\
+    \textit{Viability (si/no)} & Estado biolóxico & Campo textual de viabilidade. \\
+    \textit{Viable0\_NoViable1} & Estado biolóxico & Codificación numérica da viabilidade. \\
+    \textit{Grazing marks (si/no)} & Observación de dano & Presenza ou ausencia de marcas de herbivoría. \\
+
+    \rowcolor{udcpink!25}
+    \multicolumn{3}{c}{\textbf{Etiquetas obxectivo empregadas}} \\\hline
+    \gls{hpi} & Etiqueta ordinal de dano & Variable empregada para cuantificar o nivel de dano. \\
+    \gls{ivr} & Etiqueta asociada á orixe da depredación & Variable empregada para caracterizar o tipo de depredación. \\
+\end{longtable}
+} % alcance do rowcolors que precede á táboa longa
+
+\section{Descrición das variables obxectivo}
+Para interpretar correctamente as variables empregadas neste traballo utilizouse a documentación
+proporcionada polos expertos xunto co \textit{dataset}, en particular o documento \textit{Script for
+grazing marks.pdf}. Como xa se indicou, seleccionáronse unicamente \gls{hpi} e \gls{ivr} por seren as
+variables máis relevantes para os obxectivos do sistema, isto é, a cuantificación do dano observado e
+a caracterización da súa posible procedencia. Nesta sección descríbense os criterios empregados polos
+biólogos para definir ambas as dúas variables, xa que constitúen as etiquetas obxectivo do modelo.
+e
+
+\subsection{HPI}
+HPI, ou \textit{Herbivory pressure index} (Índice de presión de herbivoría), representa cuantitativamente
+o dano causado a unha alga por depredación herbívora. Segundo o criterio experto, a principal
+depredación destas plantas prodúcese maioritariamente por invertebrados, case sempre ourizos de mar,
+ou por vertebrados, principalmente peixes.
+
+Para determinar o dano de forma precisa, os científicos dividen a alga en tres partes anatómicas. A
+Táboa~\ref{tab:partes-hpi} resume as seccións utilizadas durante a avaliación manual.
+
+{\rowcolors{2}{white}{udcgray!25}
+\begin{table}[htbp]
+  \centering
+  \begin{tabular}{p{0.12\textwidth}|p{0.22\textwidth}|p{0.42\textwidth}}
+  \rowcolor{udcpink!25}
+  \textbf{Código} & \textbf{Parte anatómica} & \textbf{Descrición} \\\hline
+  \textit{H} & \textit{Holdfast} (órgano de fixación) & Órgano de fixación da alga ao substrato. \\
+  \textit{S} & \textit{Stipe} (estipe) & Estrutura alongada que conecta a base coa parte foliar. \\
+  \textit{B} & \textit{Blade} (lámina) & Lámina principal da alga, onde se observa a maior parte das mordeduras. \\
+  \end{tabular}
+  \caption{Partes anatómicas consideradas para a asignación do valor de \gls{hpi}.}
+  \label{tab:partes-hpi}
+\end{table}
+}
+
+O valor de \gls{hpi} depende da proporción de marcas de herbivoría observadas sobre a lámina
+(\textit{blade}) e da conservación das distintas partes da alga. A escala empregada polos expertos
+recóllese na Táboa~\ref{tab:escala-hpi}.
+
+{\rowcolors{2}{white}{udcgray!25}
+\begin{table}[htbp]
+  \centering
+  \begin{tabular}{c|c|c}
+  \rowcolor{udcpink!25}
+  \textbf{HPI} & \textbf{Estado da alga} & \textbf{Interpretación} \\\hline
+  0 & H + S + B (0\,\%) & Lámina completa sen marcas de herbivoría. \\
+  1 & H + S + B ($<25$\,\%) & Menos do 25\,\% da lámina presenta marcas. \\
+  2 & H + S + B (25--50\,\%) & Entre o 25\,\% e o 50\,\% da lámina presenta marcas. \\
+  3 & H + S + B (50--75\,\%) & Entre o 50\,\% e o 75\,\% da lámina presenta marcas. \\
+  4 & H + S + B (75--100\,\%) & A maior parte da lámina presenta marcas de dano. \\
+  5 & H + S & A alga conserva só o órgano de fixación e o estipe. \\
+  6 & H & A alga perdeu tanto o estipe como a lámina. \\
+  \end{tabular}
+  \caption{Escala de valores de \gls{hpi} segundo o criterio experto.}
+  \label{tab:escala-hpi}
+\end{table}
+}
+
+\subsection{IVR}
+IVR, ou \textit{Invertebrate/vertebrate ratio} (ratio de invertebrados/vertebrados), representa a
+proporción relativa entre marcas atribuídas a invertebrados e marcas atribuídas a vertebrados nas
+algas que presentan herbivoría observable. Esta variable utilízase, polo tanto, para caracterizar a
+posible procedencia do dano, e non a súa magnitude.
+
+O valor de \gls{ivr} só resulta interpretable nas mostras con \gls{hpi} entre 1 e 4, é dicir, nas
+algas que conservan lámina e presentan marcas de herbivoría. Pola contra, as algas con \gls{hpi} igual
+a 0 non presentan marcas, mentres que os niveis 5 e 6 indican unha perda total da lámina,
+o que impide determinar a procedencia das mordeduras. Nestes casos, o valor de \gls{ivr} establécese
+como 0 por non ser aplicable.
+
+A escala empregada polos expertos para interpretar esta variable recóllese na
+Táboa~\ref{tab:escala-ivr}.
+
+{\rowcolors{2}{white}{udcgray!25}
+\begin{table}[htbp]
+  \centering
+  \begin{tabular}{p{0.10\textwidth}|p{0.18\textwidth}|p{0.48\textwidth}}
+  \rowcolor{udcpink!25}
+  \textbf{IVR} & \textbf{Proporción I/V} & \textbf{Interpretación} \\\hline
+  0 & Non aplicable & Sen marcas observables ou sen lámina suficiente para determinar a procedencia. \\
+  1 & 0:100 & Só se observan mordeduras atribuíbles a vertebrados. \\
+  2 & 5:95 & Predominan claramente as mordeduras de vertebrados, con poucas marcas de invertebrados. \\
+  3 & 25:75 & Obsérvanse máis mordeduras de vertebrados ca de invertebrados. \\
+  4 & 50:50 & As marcas de vertebrados e invertebrados aparecen en proporción semellante. \\
+  5 & 75:25 & Obsérvanse máis marcas de invertebrados ca de vertebrados. \\
+  6 & 95:5 & Predominan claramente as marcas de invertebrados, con poucas mordeduras de vertebrados. \\
+  7 & 100:0 & Só se observan marcas atribuíbles a invertebrados. \\
+  \end{tabular}
+  \caption{Escala de valores de \gls{ivr} segundo o criterio experto.}
+  \label{tab:escala-ivr}
+\end{table}
+}
+
+\section{Metodoloxía do traballo}
+Para axilizar o desarrollo, dividiuse o traballo en varias etapas ata chegar a integración de todo o fluxo nun pipeline usable para os 
+expertos, o cal era o obexctivo inicial. Para traballar de forma ordeada, empregouse git (a través de GitHub) para control de versións. De esta forma 
+o código non estaba separado
+
+\subsection{Preprocesado de datos}
+
+\textcolor{red}{\textbf{TODO: Como procesei o CSV, como filtrei imaxes que non tiñan entrada no CSV, imaxes que incumplían as regras REVISIÓN, ESTO MELLOR NO SEGUINTE CAPÍTULO.}}
+
+\subsection{Detección de alga en imaxes}
+\textcolor{red}{\textbf{TODO: Comentar como tratei de usar OpenCV orixinalmente, cambiando a YOLO REVISIÓN, ESTO MELLOR POÑELO NO SEGUINTE CAPÍTULO.}}
+
+\subsection{Normalización de imaxes de algas}
+
+\subsection{Adestramento de CNN}
+
+\subsection{Integración da pipeline nun programa informático}
+
+
 
 \section{Arquitectura do pipeline}
 \textcolor{red}{\textbf{TODO: Presentar a estrutura xeral do sistema, indicando as etapas principais,
-como a detección da alga, o tratamento da rexión de interese e a estimación das variables obxectivo.}}
-
-\section{Modelos empregados}
-\textcolor{red}{\textbf{TODO: Describir os modelos utilizados en cada etapa do pipeline, incluíndo a
-motivación da súa elección.}}
-
-\section{Configuración experimental}
-\textcolor{red}{\textbf{TODO: Explicar a partición dos datos, as métricas empregadas e o procedemento
-seguido para avaliar o sistema.}}
+como a detección da alga, o tratamento da rexión de interese e a estimación das variables obxectivo. Facer un diagrama ou algo así}}
