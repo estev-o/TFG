@@ -237,11 +237,220 @@ Despois de revisar manualmente arredor de 1300 imaxes, obtívose un \textit{spli
 orientado á localización dunha única clase.
 
 
+\subsubsection{Elección de modelo YOLO}
+Unha vez preparado o \textit{dataset} no formato requirido, procedeuse á elección do modelo YOLO
+que se empregaría nos experimentos. Esta decisión estivo condicionada por dous factores principais:
+por unha banda, a existencia dun número elevado de variantes recentes dentro da familia YOLO e, por
+outra, as limitacións computacionais do contorno de traballo, restrinxido ao uso dun computador
+portátil equipado cunha tarxeta gráfica NVIDIA 3070.
+
+A primeira decisión consistiu en seleccionar a versión de YOLO máis axeitada para o problema. O
+desenvolvemento desta familia de modelos acelerouse notablemente nos últimos anos, e na actualidade
+existen múltiples variantes documentadas pola propia plataforma de Ultralytics
+\cite{ultralyticsModels}. Entre as versións recentes consideráronse as seguintes:
+
+\begin{itemize}
+    \item YOLOv8 (2023): O estándar da industria, consolidou YOLO como unha tecnoloxía de uso xeral.
+    \item YOLOv9 (2024): Tratou de mellorar a preservación da información ao longo de redes profundas.
+    \item YOLOv10 (2024): Reduciu a latencia eliminando a supresión de non máximos que se realizaba.
+    \item YOLOv11 (2024): Introduciu melloras internas na extracción de características e na eficiencia do cómputo.
+    \item YOLOv26 (2025): Busca mellora e estabilidade en CPUs ou hardware non dedicado.
+\end{itemize} 
+
+A elección final foi YOLOv8, fundamentalmente por tres motivos. En primeiro lugar,
+tratábase dunha versión xa moi consolidada e ben documentada, o que facilitaba a reproducibilidade
+dos experimentos e a resolución de incidencias durante o desenvolvemento. En segundo lugar, o
+problema abordado nesta etapa reducíase á detección dunha única clase, polo que non resultaba
+imprescindible recorrer ás innovacións máis recentes da familia YOLO. Finalmente, malia que versións
+posteriores como YOLOv11 prometían certas melloras de eficiencia, considerouse que YOLOv8 ofrecía un
+equilibrio máis fiable entre madurez, soporte e custo de implementación para o contexto deste
+traballo.
+
+A segunda decisión foi a selección do tamaño do modelo dentro da versión escollida. As variantes de
+YOLOv8 diferéncianse principalmente polo tamaño e a complexidade da rede neuronal
+\cite{yolov8_ultralytics}:
+\begin{itemize}
+    \item n (Nano): Modelo máis pequeno e lixeiro.
+    \item s (Small): Alternativa máis equilibrada entre custo e rendemento.
+    \item m (Medium): Opción intermedia para tarefas máis esixentes.
+    \item l (Large): Modelo de maior tamaño orientado a obter máis precisión.
+    \item x (Extra Large): Variante máis profunda e máis custosa computacionalmente.
+\end{itemize}
+
+Tendo en conta as restricións de hardware e o feito de que o problema consistía unicamente na
+localización dunha clase, considerouse razoable comezar os experimentos coa variante máis pequena,
+YOLOv8n. A hipótese de partida era que un modelo lixeiro podería ofrecer un rendemento
+suficiente neste escenario, ao tempo que reduciría de maneira significativa o custo de adestramento e
+de inferencia.
+
 \subsubsection{Adestramento de YOLO}
+O adestramento implementouse no script \texttt{05\_entrenar\_yolo.py}. Este script actúa como unha interface mínima sobre a libraría
+\texttt{Ultralytics}. Primeiro comproba que o ficheiro \texttt{data.yaml} exista, selecciona automaticamente
+o dispositivo de execución (GPU se está dispoñible e, en caso contrario, CPU), carga o
+modelo base indicado e delega o proceso en \texttt{model.train()}. Esta implementación compacta
+permitiu manter o experimento sinxelo sen introducir lóxica adicional innecesaria.
+
+O experimento principal executouse coa seguinte configuración:
+\begin{itemize}
+    \item \texttt{model=yolov8n.pt}: modelo preadestrado empregado como punto de partida.
+    \item \texttt{data=yolo/data.yaml}: definición do \textit{dataset} xerado na fase anterior.
+    \item \texttt{epochs=60}: número total de épocas de adestramento.
+    \item \texttt{imgsz=640}: resolución de entrada empregada polo detector.
+    \item \texttt{batch=8}: tamaño de lote compatible coa memoria da GPU dispoñible.
+    \item \texttt{device=0}: execución na primeira GPU do sistema.
+    \item \texttt{project=runs\_yolo}, \texttt{name=kelp4}: directorio e nome da execución gardada.
+\end{itemize}
+
+Ademais destes parámetros explícitos, Ultralytics aplicou a súa configuración por defecto para o
+resto dos hiperparámetros, incluíndo \textit{optimizer} automático, \textit{mixed precision}
+(\texttt{amp=true}), \textit{patience} de 100 épocas e as transformacións de aumento de datos
+habituais para detección.
+
+Os resultados finais do adestramento móstranse na Táboa~\ref{tab:resultados-yolo}. O mellor modelo
+gardado ao final da execución acadou valores moi elevados en todas as métricas de validación.
+
+% SEGUIIIIIIIR
+
+{\rowcolors{2}{white}{udcgray!25}
+\begin{table}[htbp]
+  \centering
+  \begin{tabular}{l|c}
+  \rowcolor{udcpink!25}
+  \textbf{Métrica} & \textbf{Valor final} \\\hline
+  Precisión & 0.99895 \\
+  \textit{Recall} & 1.00000 \\
+  mAP@50 & 0.99500 \\
+  mAP@50:95 & 0.98335 \\
+  \end{tabular}
+  \caption{Resultados finais do adestramento de YOLOv8n sobre o conxunto de validación.}
+  \label{tab:resultados-yolo}
+\end{table}
+}
+
+As curvas da Figura~\ref{fig:resultados_xerais_YOLO} amosan un comportamento estable ao longo das
+60 épocas. As perdas de adestramento e validación descenden de maneira sostida, mentres que as
+métricas de precisión e \textit{recall} soben rapidamente durante as primeiras iteracións e quedan
+practicamente saturadas arredor da época 30. En particular, o mAP@50 pasa de 0.839 na primeira
+época a 0.995 na final, e o mAP@50:95 sobe de 0.641 a 0.983. Isto indica que o modelo non só
+aprendeu a detectar a presenza da alga, senón tamén a axustar con bastante precisión as súas
+\textit{bounding boxes}.
+
+\begin{figure}[hp!]
+  \centering
+  \includegraphics[width=0.75\textwidth]{imaxes/YOLO/resultados_xerais_YOLO.png}
+  \caption{Evolución por épocas das perdas de adestramento e validación, así como das principais
+  métricas de detección, durante o adestramento de YOLOv8n.}
+  \label{fig:resultados_xerais_YOLO}
+\end{figure}
+
+As curvas en función do umbral de confianza, recollidas na
+Figura~\ref{fig:curvas_confidence_YOLO}, reforzan esta interpretación. A curva F1 mantense próxima a
+1 nun intervalo amplo de umbrales e alcanza o seu máximo cunha confianza aproximada de 0.722,
+mentres que a precisión chega a 1.0 arredor de 0.819. Isto suxire que o detector resulta pouco
+sensible á elección exacta do umbral e que pode empregarse cun valor intermedio sen degradar de modo
+apreciable o equilibrio entre falsos positivos e falsos negativos.
+
+\begin{figure}[htbp]
+    \centering
+    \begin{subfigure}[t]{0.48\textwidth}
+        \centering
+        \includegraphics[width=\textwidth]{imaxes/YOLO/curva_F1_confidence.png}
+        \caption{Curva F1 en función do umbral de confianza.}
+    \end{subfigure}
+    \hfill
+    \begin{subfigure}[t]{0.48\textwidth}
+        \centering
+        \includegraphics[width=\textwidth]{imaxes/YOLO/curva_precision_confidence.png}
+        \caption{Curva de precisión en función do umbral de confianza.}
+    \end{subfigure}
+
+    \vspace{0.5em}
+
+    \begin{subfigure}[t]{0.48\textwidth}
+        \centering
+        \includegraphics[width=\textwidth]{imaxes/YOLO/curva_recall_confidence.png}
+        \caption{Curva de \textit{recall} en función do umbral de confianza.}
+    \end{subfigure}
+    \caption{Comportamento das principais métricas de detección ao variar o umbral de confianza do
+    modelo YOLOv8n.}
+    \label{fig:curvas_confidence_YOLO}
+\end{figure}
+
+A matriz de confusión da Figura~\ref{fig:matriz_confusion_YOLO} confirma o bo comportamento
+observado nas métricas agregadas. Na avaliación de validación obtivéronse 131 deteccións correctas
+da clase \texttt{alga} e só 3 asociacións co fondo na configuración de avaliación empregada por
+Ultralytics. Pola súa parte, a Figura~\ref{fig:datos_labels_yolo} mostra  diversos 
+tamaños de \textit{bounding box}.
+Tamén vemos que a posición do centro da alga varía moito na imaxe, o que pode explicar os erros da primeira aproximación. 
+Finalmente, na última figura podemos comprobar o tamaño en \textit{x} e \textit{y} das algas.
+
+\begin{figure}[hp!]
+  \centering
+  \includegraphics[width=0.75\textwidth]{imaxes/YOLO/matriz_confusion.png}
+  \caption{Matriz de confusión do modelo YOLOv8n sobre o conxunto de validación.}
+  \label{fig:matriz_confusion_YOLO}
+\end{figure}
+
+\begin{figure}[hp!]
+  \centering
+  \includegraphics[width=0.75\textwidth]{imaxes/YOLO/datos_sobre_labels.jpg}
+  \caption{Distribución espacial e dimensional das caixas anotadas no \textit{dataset} empregado para
+  adestrar YOLO.}
+  \label{fig:datos_labels_yolo}
+\end{figure}
+
+Por último, os exemplos cualitativos da Figura~\ref{fig:exemplos_prediccions_YOLO} permiten comprobar
+que o detector funciona correctamente en situacións variadas: algas de gran tamaño, exemplares
+pequenos, mostras orientadas vertical ou horizontalmente e imaxes nas que a regra ou as anotacións
+seguen visibles na escena. En conxunto, o modelo resultou suficientemente preciso como para ser
+incorporado como primeira etapa do \textit{pipeline}, automatizando o recorte da rexión de interese
+antes da fase de normalización e inferencia.
+
+\begin{figure}[htbp]
+    \centering
+    \begin{subfigure}[t]{0.50\textwidth}
+        \centering
+        \includegraphics[width=\textwidth]{imaxes/YOLO/prediccion_validacion_1.jpg}
+        \caption{Exemplos con algas de tamaño medio e grande, con orientación variada.}
+    \end{subfigure}
+
+    \vspace{0.5em}
+
+    \begin{subfigure}[t]{0.50\textwidth}
+        \centering
+        \includegraphics[width=\textwidth]{imaxes/YOLO/prediccion_validacion_2.jpg}
+        \caption{Predicións sobre mostras pequenas, onde o detector mantén caixas axustadas.}
+    \end{subfigure}
+
+    \vspace{0.5em}
+
+    \begin{subfigure}[t]{0.50\textwidth}
+        \centering
+        \includegraphics[width=\textwidth]{imaxes/YOLO/prediccion_validacion_3.jpg}
+        \caption{Outros exemplos de validación con obxectos de pequeno tamaño e fondos semellantes.}
+    \end{subfigure}
+    \caption{Mostras de predición do modelo YOLOv8n sobre o conxunto de validación.}
+    \label{fig:exemplos_prediccions_YOLO}
+\end{figure}
+
+Cómpre sinalar, ademais, varias limitacións específicas desta fase. A máis relevante é que non se
+reservou un conxunto de test independente para avaliar o detector, polo que os resultados
+presentados corresponden unicamente ao conxunto de validación e non permiten establecer unha medida
+definitiva da súa capacidade de xeneralización. Xunto con isto, o conxunto de validación empregado
+foi reducido e procede da mesma distribución de imaxes ca o adestramento, o que dificulta descartar
+que as métricas estean parcialmente favorecidas pola homoxeneidade das condicións de captura.
+Finalmente, ao tratarse dun modelo concibido como etapa de recorte dentro do \textit{pipeline},
+priorizouse que fose suficientemente robusto para automatizar a localización da alga, máis que
+realizar unha comparación exhaustiva entre múltiples variantes do detector. Por este motivo, os
+resultados deben entenderse como unha validación funcional da etapa de detección, e non como unha
+avaliación definitiva do problema en termos de xeneralización externa.
+
 
 \section{Normalización de imaxes de algas}
 \textcolor{red}{\textbf{TODO: Detallar o proceso de recorte, limpeza e normalización das imaxes antes
 da súa entrada ao modelo de inferencia.}}
+
+%quedamos AQUIIIIIIIIIII
 
 \section{Arquitectura e adestramento da CNN}
 \textcolor{red}{\textbf{TODO: Describir a arquitectura empregada, o procedemento de adestramento e os
