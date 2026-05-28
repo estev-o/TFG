@@ -66,7 +66,7 @@ En conxunto, esta fase de preprocesado permitiu partir dun conxunto de datos má
 axeitado para o resto do traballo. Aínda que o volume de rexistros descartados non foi elevado, a
 limpeza resultou necesaria para evitar que erros de formato ou mostras sen utilidade condicionasen
 as etapas posteriores de detección, normalización e inferencia. Tras esta etapa, o conxunto final
-quedou composto por 4977 imaxes e 5486 rexistros tabulares.
+quedou composto por 4972 imaxes e 5486 rexistros tabulares.
 
 \textcolor{red}{\textbf{TODO: Engadir nas conclusións que non se borraron as filas no csv que non tiñan referencia a imaxes, pero esto non tivo un impacto real 
 en ningunha execución, só sería por perfeccionismo. Ademási comentar que inicialmente non se trataron as imaxes con HPI=0 e IVR=0 (1369)}}
@@ -309,8 +309,6 @@ habituais para detección.
 Os resultados finais do adestramento móstranse na Táboa~\ref{tab:resultados-yolo}. O mellor modelo
 gardado ao final da execución acadou valores moi elevados en todas as métricas de validación.
 
-% SEGUIIIIIIIR
-
 {\rowcolors{2}{white}{udcgray!25}
 \begin{table}[htbp]
   \centering
@@ -445,12 +443,42 @@ realizar unha comparación exhaustiva entre múltiples variantes do detector. Po
 resultados deben entenderse como unha validación funcional da etapa de detección, e non como unha
 avaliación definitiva do problema en termos de xeneralización externa.
 
+\subsubsection{Inferencia de YOLO sobre o conxunto de datos}
+Unha vez se decidiu utilizar o YOLO adestrado, procedeuse a realizar unha inferencia con ese modelo sobre todo o \textit{dataset}.
+Para facilitar esta tarefa, creouse un \textit{script} novo que nomeamos \texttt{06\_aplicar\_yolo.py}.
+
+Este \textit{script} carga o modelo adestrado previamente e aplica a inferencia de YOLO sobre as
+imaxes seleccionadas do \textit{dataset}. Para cada mostra execútase unha predición mediante
+\texttt{model.predict()}, e entre todas as deteccións devólvese unicamente a \textit{bounding box}
+de maior confianza. A partir desa caixa, recórtase a rexión correspondente da imaxe orixinal e
+gárdase no directorio de saída co sufixo \texttt{\_yolo.jpg}. O código permite configurar, ademais,
+o dispositivo de execución, a resolución de entrada, o limiar mínimo de confianza e o número de
+imaxes a procesar, xerando ao final un pequeno resumo co número de recortes gardados, imaxes sen
+detección e erros de procesado.
+
+Na execución realizada sobre o conxunto completo de datos obtivéronse 4705 recortes gardados e 267
+imaxes sen detección.
+
+Executouse ese código para recortar todo o \textit{dataset}. Neste punto xa se atopaba todo o
+conxunto recortado para a seguinte fase. Como revisión,
+decidiuse realizar unha pasada visual manual para comprobar se había algún recorte erróneo obvio.
+Elimináronse 60 imaxes, a maioría cun recorte fóra da alga. A aparición de non deteccións e recortes erróneos era esperable, debido
+ás limitacións do adestramento de YOLO que se
+mencionaron anteriormente. Nunha comprobación máis exhaustiva viuse que estas fotos eran
+especialmente problemáticas. Debido a isto e ao pequeno número de fotos erróneas, decidiuse
+continuar co mesmo YOLO e deixar como tarefa posterior unha guía para que os científicos saquen
+unhas fotos máis estandarizadas para evitar o fallo do YOLO. Como nota xeral, tamén é relevante
+mencionar que o sistema YOLO recortou algunha sombra e liñas centrais da mesa que poderían afectar
+ao posterior adestramento. Tras esta revisión manual, o conxunto final de recortes válidos quedou
+reducido a 4645 imaxes.
+
+Deste xeito, o conxunto de recortes quedou preparado para a fase posterior de normalización das
+imaxes.
 
 \section{Normalización de imaxes de algas}
 \textcolor{red}{\textbf{TODO: Detallar o proceso de recorte, limpeza e normalización das imaxes antes
 da súa entrada ao modelo de inferencia.}}
 
-%quedamos AQUIIIIIIIIIII
 
 \section{Arquitectura e adestramento da CNN}
 \textcolor{red}{\textbf{TODO: Describir a arquitectura empregada, o procedemento de adestramento e os
