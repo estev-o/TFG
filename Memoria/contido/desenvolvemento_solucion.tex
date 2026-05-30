@@ -456,7 +456,7 @@ o dispositivo de execución, a resolución de entrada, o limiar mínimo de confi
 imaxes a procesar, xerando ao final un pequeno resumo co número de recortes gardados, imaxes sen
 detección e erros de procesado.
 
-Na execución realizada sobre o conxunto completo de datos obtivéronse 4705 recortes gardados e 267
+Na execución realizada sobre o conxunto completo de datos obtivéronse 4710 recortes gardados e 262
 imaxes sen detección.
 
 Executouse ese código para recortar todo o \textit{dataset}. Neste punto xa se atopaba todo o
@@ -470,14 +470,84 @@ continuar co mesmo YOLO e deixar como tarefa posterior unha guía para que os ci
 unhas fotos máis estandarizadas para evitar o fallo do YOLO. Como nota xeral, tamén é relevante
 mencionar que o sistema YOLO recortou algunha sombra e liñas centrais da mesa que poderían afectar
 ao posterior adestramento. Tras esta revisión manual, o conxunto final de recortes válidos quedou
-reducido a 4645 imaxes.
+reducido a 4650 imaxes.
 
 Deste xeito, o conxunto de recortes quedou preparado para a fase posterior de normalización das
 imaxes.
 
 \section{Normalización de imaxes de algas}
-\textcolor{red}{\textbf{TODO: Detallar o proceso de recorte, limpeza e normalización das imaxes antes
-da súa entrada ao modelo de inferencia.}}
+Unha vez se detectaron as algas dentro das imaxes do \textit{dataset}, procedeuse a normalizalas para que
+poidesen constituír un \textit{input} válido para a CNN a adestrar. Para realizar este proceso,
+implementouse un \textit{script} máis, \texttt{07\_normalizar\_recortes.py}.
+
+Este \textit{script} parte dos recortes xerados na fase anterior e filtra unicamente aqueles cuxo
+identificador aparece no ficheiro CSV empregado como referencia. Sobre cada recorte aplícase un
+proceso de segmentación baseado no umbral de Otsu, calculado nas dúas polaridades posibles, e
+consérvase a máscara máis axeitada en función do compoñente conectado principal. A partir desta
+máscara binaria, a alga sitúase nun lenzo cadrado con fondo negro, mantendo a relación de aspecto,
+e reescálase posteriormente a un tamaño común para todo o conxunto. Deste xeito, a saída desta fase
+son máscaras binarias normalizadas e preparadas para a súa entrada na rede neuronal.
+
+Cabe destacar que o \textit{script} realiza dúas pasadas sobre o \textit{dataset}. Na primeira,
+identifícase o recorte de maior tamaño, co obxectivo de definir o tamaño do lenzo cadrado común
+sobre o que se situarán posteriormente todas as mostras. Deste xeito, evítase unha redución
+prematura de resolución nesta fase, aínda que a entrada final da CNN sexa inferior por limitacións
+de hardware. Na segunda pasada, xéranse xa os recortes normalizados e colócanse efectivamente sobre
+o lenzo negro correspondente.
+
+Para a execución, primeiro empregouse a flag debug para comprobar que a execución funcionaba. Unha vez
+se comprobou a correcta execución, normalizouse o \textit{dataset} enteiro. A resolución das imaxes
+resultantes foi 4496x4496 píxeles. Ademais, atopáronse 5 imaxes sen referencia no CSV (esta
+comprobación debera terse feito na anteriormente, no preprocesado). Con isto, finalmente obtívose un
+\textit{dataset} normalizado composto por 4645 imaxes como as da Figura~\ref{fig:algas_normalizadas}.
+
+\begin{figure}[htbp]
+    \centering
+    \begin{subfigure}[t]{0.30\textwidth}
+        \centering
+        \includegraphics[width=\textwidth]{imaxes/normalizadas/VI831_yolo.png}
+        \caption{Exemplo dunha alga normalizada con estipe grande.}
+    \end{subfigure}
+    \hspace{3cm}
+    \begin{subfigure}[t]{0.30\textwidth}
+        \centering
+        \includegraphics[width=\textwidth]{imaxes/normalizadas/VI888_yolo.png}
+        \caption{Exemplo dunha alga normalizada con ocos internos.}
+    \end{subfigure}
+    \caption{Exemplos representativos do resultado da fase de normalización.}
+    \label{fig:algas_normalizadas}
+\end{figure}
+
+Finalmente, a Figura~\ref{fig:exemplo_desde_dataset_ata_norm} permite contextualizar o punto no
+que remata esta fase: a partir dunha imaxe orixinal do \textit{dataset}, obtense finalmente unha
+máscara binaria normalizada e homoxénea, preparada para ser empregada como entrada na etapa
+seguinte. Unha vez completado este proceso, o traballo céntrase xa no deseño da arquitectura da CNN
+e no seu adestramento para realizar a inferencia sobre as variables obxectivo.
+
+\begin{figure}[htbp]
+    \centering
+    \begin{subfigure}[t]{0.48\textwidth}
+        \centering
+        \includegraphics[width=\textwidth]{imaxes/exemplo_full/VI926.JPEG}
+        \caption{Imaxe orixinal do \textit{dataset}.}
+    \end{subfigure}
+    \hfill
+    \begin{subfigure}[t]{0.48\textwidth}
+        \centering
+        \includegraphics[width=\textwidth]{imaxes/exemplo_full/VI926_yolo.jpg}
+        \caption{Recorte proporcionado polo YOLO.}
+    \end{subfigure}
+
+    \vspace{0.5em}
+
+    \begin{subfigure}[t]{0.48\textwidth}
+        \centering
+        \includegraphics[width=\textwidth]{imaxes/exemplo_full/VI926_yolo.png}
+        \caption{Normalización do recorte.}
+    \end{subfigure}
+    \caption{Transformación completa desde a imaxe orixinal ata a máscara binaria normalizada.}
+    \label{fig:exemplo_desde_dataset_ata_norm}
+\end{figure}
 
 
 \section{Arquitectura e adestramento da CNN}

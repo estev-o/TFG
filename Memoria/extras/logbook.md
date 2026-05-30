@@ -306,3 +306,5 @@ Se refactorizó también `10_test_cnn.py` para que la evaluación sirva tanto pa
 La idea de este cambio de test es que, si una muestra real debería tener `IVR=0` y el modelo no predice `HPI` en `0/5/6`, el error que aparece en `IVR` no debe leerse automáticamente como un fallo puro de la cabeza de `IVR`, porque muchas veces es un error arrastrado por `HPI`. Separar aplicabilidad y nota hace la lectura bastante más justa.
 
 Nota de limpieza de dataset: se revisó la consistencia de la regla `HPI in {0,5,6} => IVR=0` y aparecieron solo 4 incumplimientos (`VI2078`, `VI3010`, `VI4322`, `VI4337`). Se eliminaron del `dataset`, de `cnn/manifest.csv`, de los `splits` afectados y también sus imágenes en `out/` y `out_img_norm/`.
+
+MENCIONAR O FINAL DO TFG QUE SE LLE PIDE AOS CIENTÍFICOS QUE SAQUEN MELLORES FOTOS PARA EVITAR OS ERRORES
