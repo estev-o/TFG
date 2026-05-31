@@ -551,8 +551,146 @@ e no seu adestramento para realizar a inferencia sobre as variables obxectivo.
 
 
 \section{Arquitectura e adestramento da CNN}
-\textcolor{red}{\textbf{TODO: Describir a arquitectura empregada, o procedemento de adestramento e os
-criterios seguidos para avaliar o modelo.}}
+Nesta sección explicarase todo o proceso de desarrollo da parte máis costosa de todo o traballo, a decisión arquitectónica e o adestramento
+da CNN encargada de realizar a inferencia dos valoresa HPI e IVR sobre as imaxes noramalizadas. Isto débese a o aplio número de solucións
+que a tecnoloxía nos permite, dende a modificación de pesos durante o adestramento, ata o número de nodos de saída, pasando pola representación
+interna dos datos que tratamos de inferir. Por este motivo, veremos moitas variacións implementadas co obxectivo de buscar a solución
+que máis se axeite ao noso problema. \textcolor{red}{\textbf{TODO: Primer párrafo WIP, non editar ata acabar a sección.}}
+
+
+\subsection{Preparación dos datos}
+O primeiro paso desta etapa foi construír o que se coñece como \textit{manifest} do conxunto de
+datos. Neste contexto, o \textit{manifest} é un ficheiro derivado do CSV filtrado no que se recollen
+unicamente as mostras válidas para a CNN, xunto co camiño da imaxe normalizada correspondente e cos
+valores obxectivo de \texttt{HPI} e \texttt{IVR}. A partir deste ficheiro realízase posteriormente a
+partición do \textit{dataset} nas tres divisións habituais do adestramento dunha CNN:
+\textit{train}, validación e test. As dúas primeiras empréganse durante o propio proceso de
+adestramento, mentres que a división de test se reserva para comprobar que o mellor modelo
+obtido, isto é, o correspondente á época con menor erro, realmente xeneraliza e mantén un bo
+comportamento sobre imaxes nunca vistas. Os valores que usaremos para comparar os distintos modelos
+que adestremos serán os resultantes da inferencia da CNN sobre esta última división das imaxes do
+\textit{dataset}.
+
+Para isto implementouse un novo \textit{script}, \texttt{08\_build\_split\_manifest.py}, encargado de
+construír nunha única execución tanto o ficheiro \textit{manifest} coma as particións de
+\textit{train}, validación e test. O código percorre as imaxes normalizadas dispoñibles, relaciónaas
+coas súas etiquetas no CSV filtrado mediante o identificador \texttt{Photo\_cod} e xera un ficheiro
+tabular co camiño de cada imaxe e cos valores de \texttt{HPI} e \texttt{IVR}. A continuación,
+baralla aleatoriamente as mostras cunha semente fixa e reparte o conxunto segundo as proporcións
+definidas para adestramento, validación e test, garantindo así unha partición reproducible.
+
+A execución de este \textit{script} proporcionou os seguintes resultados:
+\begin{itemize}
+    \item \textit{manifest}: 4645 imaxes.
+    \item \textit{train}: 3250 imaxes.
+    \item validación: 697 imaxes.
+    \item test: 698 imaxes.
+\end{itemize}
+
+\subsection{Métricas empregadas}
+Para comparar os distintos adestramentos realizados, establecéronse varias métricas orientadas a
+avaliar a exactitude e a capacidade de xeneralización das CNN probadas. Non obstante, o conxunto de
+métricas empregado non permaneceu invariable ao longo do traballo. Nunha primeira etapa utilizáronse
+medidas globais, válidas para comparar de forma rápida distintas arquitecturas e configuracións
+xerais. Posteriormente, ao comprobar que a variable \texttt{IVR} presentaba un comportamento máis
+complexo e dependente de \texttt{HPI}, ampliouse o proceso de avaliación mediante un
+\textit{script} específico de test, \texttt{10\_test\_cnn.py}, incorporando métricas máis
+alineadas coa interpretación biolóxica do problema.
+
+\subsubsection{Métricas empregadas na avaliación inicial}
+Na fase inicial de experimentación empregáronse principalmente métricas globais, tanto durante o
+adestramento coma na avaliación posterior sobre o conxunto de test. Estas métricas permitiron
+comparar os primeiros modelos de maneira homoxénea e seleccionar as configuracións máis prometedoras.
+
+\paragraph{\textit{Loss} de adestramento e validación.}
+A \textit{loss} utilizouse como medida interna do proceso de optimización. A súa evolución ao longo
+das épocas permitiu comprobar se o modelo estaba aprendendo de forma estable e detectar posibles
+problemas de sobreaxuste. En particular, a \textit{loss} de validación empregouse como criterio
+secundario para seleccionar o mellor punto de adestramento cando varias execucións presentaban
+resultados similares nas métricas principais.
+
+\paragraph{\textit{MAE}.}
+O \textit{Mean Absolute Error} ou Erro Absoluto Medio cuantifica a distancia media entre as
+predicións do modelo e os valores reais. Durante esta primeira etapa foi a métrica principal de
+comparación entre modelos, xa que expresa directamente o erro medio en unidades da escala experta.
+No caso de modelos con dúas saídas empregáronse tres variantes:
+\begin{itemize}
+    \item \texttt{mae\_hpi}: MAE correspondente á predición de \texttt{HPI}.
+    \item \texttt{mae\_ivr}: MAE correspondente á predición de \texttt{IVR}.
+    \item \texttt{mae\_mean}: media de ambas magnitudes, utilizada como resumo global.
+\end{itemize}
+
+\paragraph{\textit{RMSE}.}
+O \textit{Root Mean Squared Error} complementa ao \textit{MAE}, xa que penaliza en maior medida os
+erros grandes. Isto resultou especialmente útil para detectar predicións afastadas do valor real,
+que no caso de \texttt{IVR} tiñan un impacto importante na interpretación biolóxica dos resultados.
+Do mesmo xeito ca no \textit{MAE}, calculáronse \texttt{rmse\_hpi}, \texttt{rmse\_ivr} e
+\texttt{rmse\_mean}.
+
+\paragraph{Exactitude das predicións.}
+Ademais dos erros medios, incorporáronse métricas discretas de acerto para avaliar en que medida as
+predicións coincidían exactamente coa nota esperada ou quedaban próximas a ela. En concreto,
+medíronse tres variantes:
+\begin{itemize}
+    \item \textit{exact match}: porcentaxe de mostras nas que a predición coincide exactamente coa etiqueta real.
+    \item \textit{within\_1}: porcentaxe de mostras cun erro absoluto menor ou igual a 1.
+    \item \textit{within\_2}: porcentaxe de mostras cun erro absoluto menor ou igual a 2.
+\end{itemize}
+Estas medidas permitiron matizar a información ofrecida por \textit{MAE} e \textit{RMSE},
+distinguindo entre pequenos desaxustes e erros realmente afastados.
+
+\paragraph{Matrices de confusión.}
+As matrices de confusión empregáronse para visualizar a distribución dos erros por clase e detectar
+patróns sistemáticos de confusión. Nunha primeira fase xeráronse matrices separadas para
+\texttt{HPI} e \texttt{IVR}, o que permitiu observar con claridade que os maiores problemas se
+concentraban na predición de \texttt{IVR}, especialmente nos erros entre niveis afastados.
+
+\subsubsection{Métricas incorporadas na avaliación posterior}
+A medida que avanzou o traballo, fíxose evidente que unha parte importante do erro en \texttt{IVR}
+non podía interpretarse illadamente, xa que esta variable só ten significado cando a predición de
+\texttt{HPI} indica que a avaliación de \texttt{IVR} resulta aplicable. Por este motivo,
+reformulouse a avaliación mediante métricas máis específicas, que pasaron a convivir coas métricas
+globais anteriores.
+
+\paragraph{Aplicabilidade de IVR.}
+Esta métrica formulouse como un problema binario: distinguir entre os casos nos que \texttt{IVR} non
+aplica (\texttt{IVR=0}) e aqueles nos que si debe existir unha nota válida (\texttt{IVR=1..7}). A
+avaliación realizouse mediante \textit{accuracy}, \textit{precision}, \textit{recall}, \textit{F1}
+e a súa correspondente matriz de confusión. O obxectivo desta medida foi separar os erros derivados
+de decidir se \texttt{IVR} debía aplicarse ou non dos erros asociados ao valor concreto da nota.
+
+\paragraph{Calidade da nota de IVR cando aplica.}
+Unha vez separada a aplicabilidade, calculáronse de novo \textit{MAE}, \textit{RMSE},
+\textit{exact match}, \textit{within\_1}, \textit{within\_2} e matriz de confusión, pero unicamente
+no subconxunto de mostras nas que \texttt{IVR} realmente debía aplicarse e o modelo tamén predixo
+que aplicaba. Isto permitiu avaliar a calidade da nota de \texttt{IVR} sen mesturala cos casos en
+que o verdadeiro problema era decidir se a variable tiña sentido ou non.
+
+\paragraph{Consistencia interna entre HPI e IVR.}
+Tamén se incorporou unha métrica de consistencia interna para comprobar se as predicións de
+\texttt{HPI} e \texttt{IVR} resultaban compatibles entre si. En particular, medíronse os casos nos
+que o \texttt{HPI} predito implicaría que \texttt{IVR} non debería aplicarse, pero a saída do modelo
+asignaba igualmente un valor positivo, e viceversa. Esta métrica resultou útil para analizar as
+variantes máis recentes do sistema, nas que a coherencia entre ambas variables pasou a ser un aspecto
+relevante da avaliación.
+
+\subsubsection{Análise cualitativa mediante \textit{heatmaps}}
+Por último, incorporouse unha análise cualitativa mediante \textit{heatmaps} da CNN. Esta ferramenta
+non se empregou como métrica cuantitativa de comparación, senón como apoio interpretativo para
+visualizar en que rexións das imaxes se centraba o modelo ao realizar as súas predicións. A súa
+utilidade foi especialmente relevante nos casos problemáticos de \texttt{IVR}, xa que permitiu
+comprobar se a rede estaba atendendo ás mordeduras propiamente ditas ou, pola contra, a outras
+estruturas como o estipe, sombras ou artefactos do fondo.
+
+\textcolor{red}{\textbf{TODO: Engadir referencias a figuras como matrices de confusión ou heatmaps.}}
+
+
+\subsection{Elección de arquitectura}
+\subsubsection{Soución por regresión}
+Acabámonos dando conta de que unha solución por regresión sempre usa float de forma interna.
+\subsubsection{Solución por clasificación ordinal}
+
+\subsection{Optimización do modelo}
 
 \section{Integración da pipeline}
 \textcolor{red}{\textbf{TODO: Explicar como se integraron os distintos compoñentes nunha ferramenta
