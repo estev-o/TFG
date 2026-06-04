@@ -686,11 +686,181 @@ estruturas como o estipe, sombras ou artefactos do fondo.
 
 
 \subsection{Elección de arquitectura}
+Chegados este punto, xa se tiña todo o necesario para adestrar unha CNN. Soamente se necesitaba escoller unha
+arquitectura para comenzar a facer probas. Isto implementouse nun \textit{script} numerado como \texttt{09}, que
+tivo distintos nomes que variaban acorde foi cambiando a arquitectura. O primeiro foi \texttt{09\_train\_regression.py}.
+
 \subsubsection{Soución por regresión}
-Acabámonos dando conta de que unha solución por regresión sempre usa float de forma interna.
+A primeira interpretación foi implementar unha CNN de regresión libre, isto significa que a súa saída non está condicionada
+por unha capa de saída \gls{softmax} que decida entre clases, sinon que a súa saída son números contínuos. Esta primeira
+interpretación decidiuse como base para escoller tanto o \gls{backbone} que empregaríamos como a forma que usaríamos para 
+chegar a inferencia da HPI e IVR, como dúas CNNs independientes, ou unha con dúas saídas. 
+
+Aínda que esta arquitectura dista moito da decisión final, esta primeira fase serviu para decidir facilmente aspectos da arquitectura,
+esperando que a CNN aprendese da forma máis exacta posible as regras dos expertos, e cunha primeira idea de usar decimais para buscar
+exactitude nas métricas, decidindo redondear cara o enteiro máis próximo no caso de que se usase como solución final.
+
+\paragraph{Elección de un \gls{backbone}.}
+Despóis dunha primeira proba \textit{smoke}, para comprobar o correcto adestramento dunha CNN de proba moi pequena no hardware dispoñible,
+pasouse a elixir entre 3 \textit{backbones}:
+
+\begin{itemize}
+    \item \textit{EfficientNet-B0}: Un modelo ultraeficiente que equilibra profundidade, ancho e resolución mediante \textit{compound scaling} para maximizar a precisión co menor custo computacional posible.
+    \item \textit{ResNet18}: Unha arquitectura clásica que introduce conexións residuais para evitar o deterioro do gradiente, permitindo un adestramento rápido, estable e eficaz.
+    \item \textit{ConvNeXt\_tiny}: Unha CNN moderna que redeseña as convolucións tradicionais inspirándose nos \textit{Vision Transformers} para ofrecer unha alta precisión e un rendemento competitivo nun formato compacto.
+\end{itemize}
+
+Os tres adestramentos realizáronse baixo a mesma configuración experimental, modificando unicamente
+o \textit{backbone} empregado en cada execución. En todos os casos utilizouse 
+un tamaño de entrada de 224 píxeles, 30 épocas de adestramento,
+\textit{batch size} 4, taxa de aprendizaxe de $10^{-4}$, \textit{weight decay} de $10^{-4}$ e
+función de perda baseada en \textit{MAE}. Deste xeito, a comparación
+entre os tres modelos mantívose o máis controlada posible, deixando como única variábel principal a
+arquitectura de base.
+
+Executáronse 3 adestramentos, nos que xa se intuía que a mellor solución sería
+\textit{ConvNeXt\_tiny}, cun \texttt{mae\_mean} de \textit{1.3034}, como se resume na
+Táboa~\ref{tab:comparativa-backbones-regresion}.
+
+{\rowcolors{2}{white}{udcgray!25}
+\begin{table}[htbp]
+    \centering
+    \footnotesize
+    \setlength{\tabcolsep}{4pt}
+    \begin{tabular}{p{0.22\textwidth}|p{0.16\textwidth}|p{0.16\textwidth}|p{0.16\textwidth}|p{0.12\textwidth}}
+        \rowcolor{udcpink!25}
+        \textbf{Backbone} & \textbf{Mellor época} & \textbf{\texttt{mae\_hpi}} & \textbf{\texttt{mae\_ivr}} & \textbf{\texttt{mae\_mean}} \\\hline
+        \textit{EfficientNet-B0} & epoch 18 & 0.6875 & 1.8467 & 1.2671 \\
+        \textit{ResNet18} & epoch 19 & 0.6859 & 1.9912 & 1.3386 \\
+        \textit{ConvNeXt\_Tiny} & epoch 18 & 0.6782 & 1.8017 & 1.2340  \\
+    \end{tabular}
+    \caption{Comparativa inicial entre os tres \textit{backbones} probados na primeira formulación por regresión, tomando como referencia a mellor época de validación de cada un.}
+    \label{tab:comparativa-backbones-regresion}
+\end{table}
+}
+
+Esta primeira vantaxe de \textit{ConvNeXt\_Tiny} quedou aínda máis clara cando se executou o
+\textit{script} de test mencionado na sección anterior. A comparación xeral sobre o conxunto de
+test recóllese na Táboa~\ref{tab:comparativa-backbones-test}, onde se observa que esta arquitectura
+mantén o mellor equilibrio global entre erro medio e exactitude.
+
+{\rowcolors{2}{white}{udcgray!25}
+\begin{table}[htbp]
+    \centering
+    \footnotesize
+    \setlength{\tabcolsep}{4pt}
+    \begin{tabular}{p{0.24\textwidth}|p{0.14\textwidth}|p{0.14\textwidth}|p{0.14\textwidth}|p{0.16\textwidth}}
+        \rowcolor{udcpink!25}
+        \textbf{Backbone} & \textbf{\texttt{mae\_mean}} & \textbf{\texttt{mae\_hpi}} & \textbf{\texttt{mae\_ivr}} & \textbf{\texttt{within1\_mean}} \\\hline
+        \textit{EfficientNet-B0} & 1.4058& 0.7636 & 2.0479 & 0.6042 \\
+        \textit{ResNet18} & 1.4560 & 0.7552 & 2.1568 & 0.5981 \\
+        \textit{ConvNeXt\_Tiny} & 1.3034 & 0.6418 & 1.9651 & 0.6827 \\
+        \rowcolor{udcpink!25}
+        \textbf{Backbone} & \textbf{\texttt{rmse\_mean}} & \textbf{\texttt{rmse\_hpi}} & \textbf{\texttt{rmse\_ivr}} \\\hline
+        \textit{EfficientNet-B0} & 2.2077 & 1.4681 & 2.9472 \\
+        \textit{ResNet18} & 2.0945 & 1.1699 & 3.0190 \\
+        \textit{ConvNeXt\_Tiny} & 2.0928 & 1.1033 & 3.0823 \\
+    \end{tabular}
+    \caption{Comparativa resumida dos resultados en test para os tres \textit{backbones} da primeira formulación por regresión.}
+    \label{tab:comparativa-backbones-test}
+\end{table}
+}
+
+Vendo o resultado de este test. Quedou claro que o mellor backbone era \textit{ConvNeXt\_Tiny}. Pero tamén se
+observou o principal problema da inferencia de HPI e IVR en xeral, que xa se mencionou brevemente, o erro
+de IVR é moito maior e máis disperso que o de HPI. Ao repasar os criterios dos expertos, este problema está
+claro, a CNN non parecía captar de maneira consistente a lóxica experta que determina cando IVR debe tomar o valor 0. Ademáis, como IVR depende directamente do
+resultado de HPI, tamén se estaría arrastrando o erro no caso de aplicar a lóxica experta. Ainda así, este primeiro 
+adestramento demostrou que a CNN non estaba tan afastada dos valores esperados, e que o enfoque baseado en CNN resultaba prometedor.
+
+Cómpre aclarar que, nesta primeira formulación por regresión, a CNN producía valores continuos para
+\texttt{HPI} e \texttt{IVR}. Porén, dado que as etiquetas expertas do problema son discretas e
+enteiras, nas avaliacións de test estas predicións aproximáronse ao enteiro máis próximo antes de
+calcular as métricas correspondentes. Esta decisión permitiu comparar a saída da rede coa escala de
+notas empregada polos expertos, aínda que tamén puxo de manifesto a limitación de base desta
+formulación fronte a un problema de natureza ordinal.
+
 \subsubsection{Solución por clasificación ordinal}
 
+Co resultado obtido, quedou claro que era necesario cambiar a aproximación e buscar unha solución que
+tratase o problema como unha clasificación ordinal que replicase de mellor forma o criterio experto 
+empregado para avaliar as algas.
+
+Esta decisión estivo motivada pola propia natureza das variables obxectivo. Tanto \texttt{HPI} como
+\texttt{IVR} se expresan mediante etiquetas enteiras e ordenadas, non mediante magnitudes continuas. A
+formulación por regresión empregada inicialmente obrigaba a producir saídas continuas e a
+aproximalas posteriormente ao enteiro máis próximo, introducindo unha representación que non se
+axustaba ben á escala real empregada polos expertos. Pola contra, unha formulación ordinal permite
+aprender directamente as fronteiras entre niveis consecutivos da escala e, ademais, penaliza de
+maneira máis natural os erros afastados, por exemplo confundir unha mostra etiquetada como 1 cunha
+predición de 5, que os erros próximos como 1 fronte a 2. Este comportamento encaixa mellor coa
+interpretación biolóxica do problema, na que non todos os erros teñen a mesma gravidade.
+
+Como vimos, utilizouse o estudo sobre CORAL-CNN \cite{articuloCoral} como base do noso códgio,
+pero non se aplicou exactamente como se propón no \textit{paper}. No traballo orixinal, CORAL
+preséntase como un mecanismo para adaptar unha CNN convencional a un único problema ordinal,
+substituíndo a cabeza de clasificación estándar por unha saída formada por \texttt{K-1} tarefas binarias
+acumulativas asociadas aos umbrais entre clases consecutivas. A predición final non se obtén
+escollendo unha categoría entre $K$ posibilidades, senón reconstruíndoa a partir dese
+conxunto ordenado de decisións binarias. Na nosa implementación mantívose esa mesma idea de base,
+isto é, combinar un \textit{backbone} convolucional cunha cabeza ordinal, pero adaptándoa a un
+escenario con dúas variables obxectivo. Así, o \textit{backbone} compartido segue a encargarse da
+extracción de características visuais das imaxes, mentres que a capa final se dimensiona para
+producir os umbrais necesarios de \texttt{HPI}, de \texttt{IVR} ou de ambas variables á vez. A
+diferenza fundamental con respecto ao escenario do artigo non está, polo tanto, na lóxica ordinal da
+saída, senón no feito de que aquí se estende a unha formulación multisaída máis acorde co problema
+real do traballo.
+
+\paragraph{Elección de saída da CNN.}
+Unha vez implementada a clasificación ordinal, e como xa adiantamos, decidiuse realizar unha comparación
+entre usar dúas CNN independientes (unha para HPI e outra para IVR) ou soamente unha CNN con dúas saidas.
+
+Despois de executar os tres adestramentos e avaliar cada unha das súas mellores runs sobre o
+conxunto de test, observouse que a opción con dúas saídas compartidas resultaba a máis sólida en
+termos xerais. A run conxunta mellorou simultaneamente o \texttt{mae\_hpi} e o \texttt{mae\_ivr}
+respecto das runs especializadas, acadando un \texttt{mae\_mean} de 1.2142 fronte a 1.9656 no caso
+de \texttt{IVR} por separado e 0.5745 no caso de \texttt{HPI} por separado. Ademais, a exactitude
+exacta e o acerto dentro dun erro absoluto menor ou igual a 1 tamén foron
+competitivos, para \texttt{HPI}, a run conxunta obtivo mellor \textit{exact match} ca a run
+especializada, mentres que para \texttt{IVR} tamén mellorou o
+\textit{within\_1}. Estes resultados suxiren que compartir un mesmo \textit{backbone} para ambas
+variables permitía aproveitar mellor a información
+visual común presente nas imaxes, polo que se decidiu continuar o desenvolvemento a partir desta
+configuración multisaída.
+
+{\rowcolors{2}{white}{udcgray!25}
+\begin{table}[htbp]
+    \centering
+    \footnotesize
+    \setlength{\tabcolsep}{4pt}
+    \begin{tabular}{p{0.16\textwidth}|p{0.12\textwidth}|p{0.13\textwidth}|p{0.13\textwidth}|p{0.13\textwidth}|p{0.13\textwidth}} 
+        \rowcolor{udcpink!25}
+        \textbf{Configuración} & \textbf{Saída} & \textbf{\texttt{mae}} & \textbf{\texttt{rmse}} &  \textbf{\texttt{exact\_match}} & \textbf{\texttt{within\_1}} \\\hline
+        CNN separada & \texttt{HPI} & 0.5745 & 1.1119 & 0.5946 & 0.9212 \\
+        CNN separada & \texttt{IVR} & 1.9656 & 3.2211 & 0.4742 & 0.6433 \\
+        CNN conxunta & \texttt{HPI} & 0.5630 & 1.1412 & 0.6261 & 0.9112 \\
+        CNN conxunta & \texttt{IVR} & 1.8653 & 3.1199 & 0.4986 & 0.6519 \\
+        CNN conxunta & media & 1.2142 & 2.1305 & 0.5623 & 0.7815 \\
+    \end{tabular}
+    \caption{Comparativa dos resultados en test entre as runs ordinais con saídas separadas e a run ordinal conxunta con \textit{ConvNeXt\_Tiny}.}
+    \label{tab:comparativa-ordinal-separada-conxunta}
+\end{table}
+}
+
 \subsection{Optimización do modelo}
+\subsubsection{Ponderación e \textit{Early Stopping}}
+8 e 9
+
+\subsubsection{Uso de CORAL estricto}
+\textcolor{red}{\textbf{TODO: Revisar esta sección, quizás borrala.}}
+run 10
+\subsubsection{Mellora de backbone}
+run 11, 12
+\subsubsection{Agrupación de IVR}
+run 12
+
+\subsubsection{Aplicación da lóxica experta}
+run 13, 14 e 15
 
 \section{Integración da pipeline}
 \textcolor{red}{\textbf{TODO: Explicar como se integraron os distintos compoñentes nunha ferramenta
