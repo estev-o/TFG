@@ -21,6 +21,8 @@ from torchvision.models import (
     resnet18,
 )
 
+from hpi_ivr_dual_conditioned import build_conditioned_dual_model
+
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
@@ -80,13 +82,13 @@ def output_dim_for_target(
         raise ValueError(
             "La variante hpi_coral_ivr_score no soporta target=ivr en heatmaps."
         )
-    if head_type == "hpi_coral_ivr_dual":
+    if head_type in {"hpi_coral_ivr_dual", "hpi_coral_ivr_dual_conditioned"}:
         if target == "both":
             return num_classes_hpi + 1
         if target == "hpi":
             return num_classes_hpi - 1
         raise ValueError(
-            "La variante hpi_coral_ivr_dual no soporta target=ivr en heatmaps."
+            f"La variante {head_type} no soporta target=ivr en heatmaps."
         )
     if target == "both":
         return (num_classes_hpi - 1) + (num_classes_ivr - 1)
@@ -95,7 +97,26 @@ def output_dim_for_target(
     return num_classes_ivr - 1
 
 
-def build_model(name: str, output_dim: int) -> nn.Module:
+def build_model(
+    name: str,
+    output_dim: int,
+    head_type: str = "ordinal_coral",
+    num_classes_hpi: int = 0,
+    target: str = "both",
+    ivr_conditioning_source: str = "hpi_probs",
+    ivr_conditioned_hidden_dim: int = 128,
+    ivr_conditioned_dropout: float = 0.1,
+) -> nn.Module:
+    if head_type == "hpi_coral_ivr_dual_conditioned":
+        return build_conditioned_dual_model(
+            name,
+            pretrained=False,
+            num_classes_hpi=num_classes_hpi,
+            target=target,
+            ivr_conditioning_source=ivr_conditioning_source,
+            ivr_hidden_dim=ivr_conditioned_hidden_dim,
+            ivr_dropout=ivr_conditioned_dropout,
+        )
     if name == "resnet18":
         model = resnet18(weights=None)
         model.fc = nn.Linear(model.fc.in_features, output_dim)
@@ -246,12 +267,13 @@ def ordinal_score_for_class(logits: torch.Tensor, class_idx: int) -> torch.Tenso
 
 
 def resolve_target_layer(model_name: str, model: nn.Module) -> nn.Module:
+    backbone = model.backbone if hasattr(model, "backbone") else model
     if model_name == "resnet18":
-        return model.layer4[-1]
+        return backbone.layer4[-1]
     if model_name == "efficientnet_b0":
-        return model.features[-1]
+        return backbone.features[-1]
     if model_name in {"convnext_tiny", "convnext_small"}:
-        return model.features[-1]
+        return backbone.features[-1]
     raise ValueError(f"No hay target layer Grad-CAM para: {model_name}")
 
 
@@ -413,7 +435,10 @@ def save_prediction_heatmaps(
                                 "score": -((ivr_score_value - anchor) ** 2).sum(),
                             }
                         )
-                elif head_type == "hpi_coral_ivr_dual":
+                elif head_type in {
+                    "hpi_coral_ivr_dual",
+                    "hpi_coral_ivr_dual_conditioned",
+                }:
                     ivr_app_logit = logits[:, hpi_dim]
                     ivr_score_logit = logits[:, hpi_dim + 1]
                     ivr_app_prob = torch.sigmoid(ivr_app_logit)
@@ -568,7 +593,12 @@ def main() -> None:
     if target_name not in {"both", "hpi", "ivr"}:
         raise ValueError(f"Target no soportado: {target_name}")
     head_type = str(config.get("head_type", "ordinal_coral"))
-    if head_type not in {"ordinal_coral", "hpi_coral_ivr_score", "hpi_coral_ivr_dual"}:
+    if head_type not in {
+        "ordinal_coral",
+        "hpi_coral_ivr_score",
+        "hpi_coral_ivr_dual",
+        "hpi_coral_ivr_dual_conditioned",
+    }:
         raise ValueError(f"head_type no soportado en heatmaps: {head_type}")
 
     num_classes_hpi = int(config.get("num_classes_hpi", 0))
@@ -597,7 +627,16 @@ def main() -> None:
     output_dim = output_dim_for_target(
         head_type, target_name, num_classes_hpi, num_classes_ivr
     )
-    model = build_model(model_name, output_dim=output_dim).to(device)
+    model = build_model(
+        model_name,
+        output_dim=output_dim,
+        head_type=head_type,
+        num_classes_hpi=num_classes_hpi,
+        target=target_name,
+        ivr_conditioning_source=str(config.get("ivr_conditioning_source", "hpi_probs")),
+        ivr_conditioned_hidden_dim=int(config.get("ivr_conditioned_hidden_dim", 128)),
+        ivr_conditioned_dropout=float(config.get("ivr_conditioned_dropout", 0.1)),
+    ).to(device)
     ckpt = torch.load(checkpoint_path, map_location=device)
     state_dict = ckpt["model_state_dict"] if isinstance(ckpt, dict) and "model_state_dict" in ckpt else ckpt
     model.load_state_dict(state_dict)

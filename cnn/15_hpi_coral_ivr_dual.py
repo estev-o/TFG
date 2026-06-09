@@ -28,6 +28,8 @@ from torchvision.models import (
     resnet18,
 )
 
+from hpi_ivr_dual_conditioned import build_conditioned_dual_model
+
 
 IVR_SCORE_TARGETS_BY_CLASS: dict[int, float] = {
     1: 0.00,
@@ -93,6 +95,29 @@ def parse_args() -> argparse.Namespace:
         type=float,
         default=0.5,
         help="Umbral de aplicabilidad en inferencia para IVR.",
+    )
+    parser.add_argument(
+        "--condition-ivr-on-hpi",
+        action="store_true",
+        help="Condiciona las cabezas IVR con la salida ordinal de HPI dentro de la red.",
+    )
+    parser.add_argument(
+        "--ivr-conditioning-source",
+        choices=["hpi_probs", "hpi_logits"],
+        default="hpi_probs",
+        help="Que representacion de HPI alimentar a las cabezas IVR condicionadas.",
+    )
+    parser.add_argument(
+        "--ivr-conditioned-hidden-dim",
+        type=int,
+        default=128,
+        help="Dimensionalidad del MLP intermedio para IVR condicionado.",
+    )
+    parser.add_argument(
+        "--ivr-conditioned-dropout",
+        type=float,
+        default=0.1,
+        help="Dropout del MLP intermedio para IVR condicionado.",
     )
     parser.add_argument("--workers", type=int, default=4)
     parser.add_argument("--seed", type=int, default=42)
@@ -615,6 +640,11 @@ def main() -> None:
 
     num_classes_hpi, num_classes_ivr = infer_num_classes(train_ds, val_ds)
     output_dim = output_dim_for_target(args.target, num_classes_hpi)
+    head_type = (
+        "hpi_coral_ivr_dual_conditioned"
+        if args.condition_ivr_on_hpi and args.target == "both"
+        else "hpi_coral_ivr_dual"
+    )
 
     if args.target == "both":
         raw_hpi = float(args.both_loss_weight_hpi)
@@ -656,7 +686,18 @@ def main() -> None:
         pin_memory=device.type == "cuda",
     )
 
-    model = build_model(args.model, args.pretrained, output_dim=output_dim).to(device)
+    if head_type == "hpi_coral_ivr_dual_conditioned":
+        model = build_conditioned_dual_model(
+            args.model,
+            pretrained=args.pretrained,
+            num_classes_hpi=num_classes_hpi,
+            target=args.target,
+            ivr_conditioning_source=args.ivr_conditioning_source,
+            ivr_hidden_dim=args.ivr_conditioned_hidden_dim,
+            ivr_dropout=args.ivr_conditioned_dropout,
+        ).to(device)
+    else:
+        model = build_model(args.model, args.pretrained, output_dim=output_dim).to(device)
     criterion = HpiCoralIvrDualLoss(
         args.target,
         num_classes_hpi=num_classes_hpi,
@@ -673,7 +714,7 @@ def main() -> None:
     config_data = vars(args).copy()
     config_data.update(
         {
-            "head_type": "hpi_coral_ivr_dual",
+            "head_type": head_type,
             "hpi_head_impl": "legacy_ordinal_bce_linear",
             "hpi_head_matches_coral_paper_exactly": False,
             "hpi_head_note": (
@@ -694,6 +735,15 @@ def main() -> None:
             "ivr_head_note": (
                 "IVR usa dos cabezas separadas: una binaria para aplicabilidad "
                 "(0 vs 1..7) y otra continua para score peces<->erizos."
+            ),
+            "ivr_conditioning_enabled": head_type == "hpi_coral_ivr_dual_conditioned",
+            "ivr_conditioning_source": args.ivr_conditioning_source,
+            "ivr_conditioned_hidden_dim": args.ivr_conditioned_hidden_dim,
+            "ivr_conditioned_dropout": args.ivr_conditioned_dropout,
+            "ivr_conditioning_note": (
+                "Las cabezas IVR reciben la salida ordinal de HPI como entrada adicional."
+                if head_type == "hpi_coral_ivr_dual_conditioned"
+                else "Sin condicionamiento explicito de IVR por HPI dentro de la cabeza."
             ),
             "ivr_score_loss_effective": "mse",
             "ivr_score_hpi_zero_classes": [],
@@ -724,6 +774,13 @@ def main() -> None:
             f"IVR dual activo: app={ivr_app_loss_weight:.3f} score={ivr_score_loss_weight:.3f}; "
             f"threshold_app={args.ivr_app_threshold:.2f}"
         )
+        if head_type == "hpi_coral_ivr_dual_conditioned":
+            print(
+                "IVR condicionado por HPI: "
+                f"source={args.ivr_conditioning_source} "
+                f"hidden={args.ivr_conditioned_hidden_dim} "
+                f"dropout={args.ivr_conditioned_dropout:.2f}"
+            )
 
     for epoch in range(1, args.epochs + 1):
         train_loss = run_epoch_train(
@@ -753,7 +810,7 @@ def main() -> None:
         ckpt_payload = {
             "epoch": epoch,
             "model_state_dict": model.state_dict(),
-            "head_type": "hpi_coral_ivr_dual",
+            "head_type": head_type,
             "target": args.target,
             "num_classes_hpi": num_classes_hpi,
             "num_classes_ivr": num_classes_ivr,
@@ -763,6 +820,10 @@ def main() -> None:
             "ivr_score_loss_weight_effective": ivr_score_loss_weight,
             "ivr_applicable_definition": "hpi in {1,2,3,4}",
             "ivr_score_targets": ivr_score_targets_serializable(),
+            "ivr_conditioning_enabled": head_type == "hpi_coral_ivr_dual_conditioned",
+            "ivr_conditioning_source": args.ivr_conditioning_source,
+            "ivr_conditioned_hidden_dim": args.ivr_conditioned_hidden_dim,
+            "ivr_conditioned_dropout": args.ivr_conditioned_dropout,
             "ivr_score_loss_effective": "mse",
             "ivr_score_hpi_zero_classes": [],
             "ivr_score_active_hpi_classes": [1, 2, 3, 4],

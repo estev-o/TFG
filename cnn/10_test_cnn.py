@@ -23,6 +23,8 @@ from torchvision.models import (
     resnet18,
 )
 
+from hpi_ivr_dual_conditioned import build_conditioned_dual_model
+
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Evalua una run CNN en split de test")
@@ -181,13 +183,13 @@ def output_dim_for_head_type(
         raise ValueError(
             "La variante hpi_coral_ivr_score no soporta target=ivr en evaluacion."
         )
-    if head_type == "hpi_coral_ivr_dual":
+    if head_type in {"hpi_coral_ivr_dual", "hpi_coral_ivr_dual_conditioned"}:
         if target == "both":
             return num_classes_hpi + 1
         if target == "hpi":
             return num_classes_hpi - 1
         raise ValueError(
-            "La variante hpi_coral_ivr_dual no soporta target=ivr en evaluacion."
+            f"La variante {head_type} no soporta target=ivr en evaluacion."
         )
     if target == "both":
         return (num_classes_hpi - 1) + (num_classes_ivr - 1)
@@ -196,7 +198,26 @@ def output_dim_for_head_type(
     return num_classes_ivr - 1
 
 
-def build_model(name: str, output_dim: int) -> nn.Module:
+def build_model(
+    name: str,
+    output_dim: int,
+    head_type: str = "ordinal_coral",
+    num_classes_hpi: int = 0,
+    target: str = "both",
+    ivr_conditioning_source: str = "hpi_probs",
+    ivr_conditioned_hidden_dim: int = 128,
+    ivr_conditioned_dropout: float = 0.1,
+) -> nn.Module:
+    if head_type == "hpi_coral_ivr_dual_conditioned":
+        return build_conditioned_dual_model(
+            name,
+            pretrained=False,
+            num_classes_hpi=num_classes_hpi,
+            target=target,
+            ivr_conditioning_source=ivr_conditioning_source,
+            ivr_hidden_dim=ivr_conditioned_hidden_dim,
+            ivr_dropout=ivr_conditioned_dropout,
+        )
     if name == "resnet18":
         model = resnet18(weights=None)
         model.fc = nn.Linear(model.fc.in_features, output_dim)
@@ -335,7 +356,7 @@ def decode_predictions(
             pred = decode_ordinal_logits(logits)
             return pred.unsqueeze(1).to(torch.int64)
         raise ValueError("head_type hpi_coral_ivr_score no soporta target=ivr.")
-    if head_type == "hpi_coral_ivr_dual":
+    if head_type in {"hpi_coral_ivr_dual", "hpi_coral_ivr_dual_conditioned"}:
         if target == "both":
             hpi_dim = num_classes_hpi - 1
             pred_hpi = decode_ordinal_logits(logits[:, :hpi_dim])
@@ -356,7 +377,7 @@ def decode_predictions(
         if target == "hpi":
             pred = decode_ordinal_logits(logits)
             return pred.unsqueeze(1).to(torch.int64)
-        raise ValueError("head_type hpi_coral_ivr_dual no soporta target=ivr.")
+        raise ValueError(f"head_type {head_type} no soporta target=ivr.")
 
     if target == "both":
         hpi_dim = num_classes_hpi - 1
@@ -381,7 +402,11 @@ def extract_pred_ivr_scores(
     target: str,
     num_classes_hpi: int,
 ) -> Optional[torch.Tensor]:
-    if head_type not in {"hpi_coral_ivr_score", "hpi_coral_ivr_dual"}:
+    if head_type not in {
+        "hpi_coral_ivr_score",
+        "hpi_coral_ivr_dual",
+        "hpi_coral_ivr_dual_conditioned",
+    }:
         return None
     if target != "both":
         return None
@@ -397,7 +422,7 @@ def extract_pred_ivr_app_probs(
     target: str,
     num_classes_hpi: int,
 ) -> Optional[torch.Tensor]:
-    if head_type != "hpi_coral_ivr_dual":
+    if head_type not in {"hpi_coral_ivr_dual", "hpi_coral_ivr_dual_conditioned"}:
         return None
     if target != "both":
         return None
@@ -715,6 +740,25 @@ def save_plots(
     return outputs, info
 
 
+def save_confusion_plot_from_metrics(
+    out_dir: Path,
+    out_name: str,
+    matrix: Sequence[Sequence[int]],
+    labels: Sequence[str | int],
+    title: str,
+) -> bool:
+    try:
+        import matplotlib
+
+        matplotlib.use("Agg")
+    except ImportError:
+        return False
+
+    cm = torch.tensor(matrix, dtype=torch.int64)
+    plot_confusion_matrix(out_dir / out_name, cm, labels, title=title)
+    return True
+
+
 _HEATMAP_MODULE: Optional[Any] = None
 
 
@@ -749,11 +793,16 @@ def main() -> None:
         raise ValueError(f"Target no soportado: {target_name}")
 
     head_type = str(config.get("head_type", ""))
-    if head_type not in {"ordinal_coral", "hpi_coral_ivr_score", "hpi_coral_ivr_dual"}:
+    if head_type not in {
+        "ordinal_coral",
+        "hpi_coral_ivr_score",
+        "hpi_coral_ivr_dual",
+        "hpi_coral_ivr_dual_conditioned",
+    }:
         raise RuntimeError(
             "Esta version de 10_test_cnn.py solo soporta "
             "head_type=ordinal_coral, head_type=hpi_coral_ivr_score "
-            "o head_type=hpi_coral_ivr_dual."
+            "o head_type=hpi_coral_ivr_dual/hpi_coral_ivr_dual_conditioned."
         )
 
     num_classes_hpi = int(config.get("num_classes_hpi", 0))
@@ -811,7 +860,16 @@ def main() -> None:
         pin_memory=device.type == "cuda",
     )
 
-    model = build_model(model_name, output_dim=output_dim).to(device)
+    model = build_model(
+        model_name,
+        output_dim=output_dim,
+        head_type=head_type,
+        num_classes_hpi=num_classes_hpi,
+        target=target_name,
+        ivr_conditioning_source=str(config.get("ivr_conditioning_source", "hpi_probs")),
+        ivr_conditioned_hidden_dim=int(config.get("ivr_conditioned_hidden_dim", 128)),
+        ivr_conditioned_dropout=float(config.get("ivr_conditioned_dropout", 0.1)),
+    ).to(device)
     ckpt = torch.load(checkpoint_path, map_location=device)
     state_dict = ckpt["model_state_dict"] if isinstance(ckpt, dict) and "model_state_dict" in ckpt else ckpt
     model.load_state_dict(state_dict)
@@ -1059,6 +1117,24 @@ def main() -> None:
         pred_ivr_applicable_csv = (
             (y_pred[:, 1].to(torch.int64) > 0).to(torch.int64).tolist()
         )
+        ivr_app_cm = ivr_applicability_metrics.get("confusion_matrix", {})
+        ivr_app_labels = ivr_app_cm.get("labels", ["ivr_0", "ivr_1_7"])
+        ivr_app_matrix = ivr_app_cm.get("matrix", [])
+        if ivr_app_matrix and save_confusion_plot_from_metrics(
+            output_dir,
+            "5_confusion_ivr_applicability.png",
+            ivr_app_matrix,
+            ivr_app_labels,
+            title="5) Confusion Matrix - IVR Applicability",
+        ):
+            plot_files.append("5_confusion_ivr_applicability.png")
+            confusion_info["ivr_applicability"] = {
+                "labels": [str(x) for x in ivr_app_labels],
+                "matrix": ivr_app_matrix,
+                "definition": "Clasificacion binaria de aplicabilidad de IVR: 0 vs 1..7.",
+                "true_definition": "true_hpi in {1,2,3,4}",
+                "pred_definition": "pred_ivr > 0",
+            }
 
     predictions_path = output_dir / "predictions_test.csv"
     save_predictions_csv(
