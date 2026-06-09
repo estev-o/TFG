@@ -1,4 +1,4 @@
-.PHONY: help clean run1 run1_debug run2 run2_debug run2_all run2_debug_individual run3 train_yolo apply_yolo normalize_out cnn_prepare cnn_train cnn_smoke cnn_test cnn_train_hpi cnn_train_ivr cnn_train_both cnn_train_both_highres cnn_train_ivr_grouped cnn_train_hpi_coral_ivr_score cnn_train_hpi_coral_ivr_dual
+.PHONY: help clean run1 run1_debug run2 run2_debug run2_all run2_debug_individual run3 train_yolo apply_yolo normalize_out cnn_prepare cnn_train cnn_smoke cnn_test cnn_train_hpi cnn_train_ivr cnn_train_both cnn_train_both_highres cnn_train_ivr_grouped cnn_train_hpi_coral_ivr_score cnn_train_hpi_coral_ivr_dual cnn_train_hpi_coral_ivr_dual_conditioned cnn_test_hpi_coral_ivr_dual_conditioned
 
 # Variables
 VENV = .venv
@@ -63,6 +63,10 @@ CNN_BOTH_W_IVR ?= 0.6
 CNN_IVR_APP_W ?= 0.5
 CNN_IVR_SCORE_W ?= 0.5
 CNN_IVR_APP_THRESHOLD ?= 0.5
+CNN_CONDITION_IVR_ON_HPI ?= 0
+CNN_IVR_CONDITIONING_SOURCE ?= hpi_probs
+CNN_IVR_CONDITIONED_HIDDEN ?= 128
+CNN_IVR_CONDITIONED_DROPOUT ?= 0.1
 CNN_HUBER_DELTA ?= 1.0
 CNN_USE_IVR_COARSE_FINE ?= 0
 CNN_IVR_COARSE_BINS ?= 0-2,3-5,6-7
@@ -217,5 +221,18 @@ cnn_train_hpi_coral_ivr_score: ## Entrena HPI ordinal + IVR score continuo
 
 cnn_train_hpi_coral_ivr_dual: ## Entrena HPI ordinal + IVR dual (aplicabilidad + score)
 	@echo "$(BLUE)Entrenando CNN HPI CORAL-like + IVR dual$(NC)"
-	$(PYTHON) $(SCRIPT_CNN_TRAIN_HPI_CORAL_IVR_DUAL) --train-csv $(CNN_TRAIN_CSV) --val-csv $(CNN_VAL_CSV) --out-dir $(CNN_RUN_DIR) --model $(CNN_MODEL) --target $(CNN_TARGET) --img-size $(CNN_IMG) --epochs $(CNN_EPOCHS) --batch-size $(CNN_BATCH) --lr $(CNN_LR) --weight-decay $(CNN_WD) --both-loss-weight-hpi $(CNN_BOTH_W_HPI) --both-loss-weight-ivr $(CNN_BOTH_W_IVR) --ivr-app-loss-weight $(CNN_IVR_APP_W) --ivr-score-loss-weight $(CNN_IVR_SCORE_W) --ivr-app-threshold $(CNN_IVR_APP_THRESHOLD) --workers $(CNN_WORKERS) --seed $(CNN_SEED) --device $(CNN_DEVICE) --max-train-samples $(CNN_MAX_TRAIN) --max-val-samples $(CNN_MAX_VAL) --early-stopping-patience $(CNN_ES_PATIENCE) --early-stopping-min-delta $(CNN_ES_MIN_DELTA) $(if $(filter 1 true TRUE yes YES,$(CNN_PRETRAINED)),--pretrained,) $(if $(filter 1 true TRUE yes YES,$(CNN_AMP)),--amp,)
+	$(PYTHON) $(SCRIPT_CNN_TRAIN_HPI_CORAL_IVR_DUAL) --train-csv $(CNN_TRAIN_CSV) --val-csv $(CNN_VAL_CSV) --out-dir $(CNN_RUN_DIR) --model $(CNN_MODEL) --target $(CNN_TARGET) --img-size $(CNN_IMG) --epochs $(CNN_EPOCHS) --batch-size $(CNN_BATCH) --lr $(CNN_LR) --weight-decay $(CNN_WD) --both-loss-weight-hpi $(CNN_BOTH_W_HPI) --both-loss-weight-ivr $(CNN_BOTH_W_IVR) --ivr-app-loss-weight $(CNN_IVR_APP_W) --ivr-score-loss-weight $(CNN_IVR_SCORE_W) --ivr-app-threshold $(CNN_IVR_APP_THRESHOLD) --ivr-conditioning-source $(CNN_IVR_CONDITIONING_SOURCE) --ivr-conditioned-hidden-dim $(CNN_IVR_CONDITIONED_HIDDEN) --ivr-conditioned-dropout $(CNN_IVR_CONDITIONED_DROPOUT) --workers $(CNN_WORKERS) --seed $(CNN_SEED) --device $(CNN_DEVICE) --max-train-samples $(CNN_MAX_TRAIN) --max-val-samples $(CNN_MAX_VAL) --early-stopping-patience $(CNN_ES_PATIENCE) --early-stopping-min-delta $(CNN_ES_MIN_DELTA) $(if $(filter 1 true TRUE yes YES,$(CNN_PRETRAINED)),--pretrained,) $(if $(filter 1 true TRUE yes YES,$(CNN_AMP)),--amp,) $(if $(filter 1 true TRUE yes YES,$(CNN_CONDITION_IVR_ON_HPI)),--condition-ivr-on-hpi,)
 	@echo "$(GREEN)Entrenamiento HPI CORAL-like + IVR dual finalizado. Salida: $(CNN_RUN_DIR)$(NC)"
+
+cnn_train_hpi_coral_ivr_dual_conditioned: ## Entrena HPI ordinal + IVR dual condicionado por HPI
+	@$(MAKE) cnn_train_hpi_coral_ivr_dual \
+		CNN_MODEL=convnext_tiny \
+		CNN_TARGET=both \
+		CNN_PRETRAINED=1 \
+		CNN_CONDITION_IVR_ON_HPI=1 \
+		CNN_RUN_DIR=cnn/runs/hpi_coral_ivr_dual_conditioned_convnext_tiny_e$(CNN_EPOCHS)
+
+cnn_test_hpi_coral_ivr_dual_conditioned: ## Evalua la run condicionada por HPI
+	@$(MAKE) cnn_test \
+		CNN_TEST_RUN_DIR=$(CNN_RUN_DIR) \
+		CNN_TEST_TARGET=auto
