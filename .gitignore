@@ -38,6 +38,8 @@ Thumbs.db
 # directorio de imágenes de yoloseg
 /dateset-segmentado/
 
+/peer_review_dataset/
+
 #Openvpn
 *.ovpn
 
