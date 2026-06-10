@@ -21,7 +21,10 @@ from torchvision.models import (
     resnet18,
 )
 
-from hpi_ivr_dual_conditioned import build_conditioned_dual_model
+from hpi_ivr_dual_conditioned import (
+    build_conditioned_dual_model,
+    build_conditioned_score_model,
+)
 
 
 def parse_args() -> argparse.Namespace:
@@ -82,6 +85,14 @@ def output_dim_for_target(
         raise ValueError(
             "La variante hpi_coral_ivr_score no soporta target=ivr en heatmaps."
         )
+    if head_type == "hpi_coral_ivr_score_conditioned":
+        if target == "both":
+            return num_classes_hpi
+        if target == "hpi":
+            return num_classes_hpi - 1
+        raise ValueError(
+            "La variante hpi_coral_ivr_score_conditioned no soporta target=ivr en heatmaps."
+        )
     if head_type in {"hpi_coral_ivr_dual", "hpi_coral_ivr_dual_conditioned"}:
         if target == "both":
             return num_classes_hpi + 1
@@ -109,6 +120,16 @@ def build_model(
 ) -> nn.Module:
     if head_type == "hpi_coral_ivr_dual_conditioned":
         return build_conditioned_dual_model(
+            name,
+            pretrained=False,
+            num_classes_hpi=num_classes_hpi,
+            target=target,
+            ivr_conditioning_source=ivr_conditioning_source,
+            ivr_hidden_dim=ivr_conditioned_hidden_dim,
+            ivr_dropout=ivr_conditioned_dropout,
+        )
+    if head_type == "hpi_coral_ivr_score_conditioned":
+        return build_conditioned_score_model(
             name,
             pretrained=False,
             num_classes_hpi=num_classes_hpi,
@@ -409,7 +430,10 @@ def save_prediction_heatmaps(
                         "score": ordinal_score_for_class(hpi_logits, pred_hpi_effective).sum(),
                     }
                 )
-                if head_type == "hpi_coral_ivr_score":
+                if head_type in {
+                    "hpi_coral_ivr_score",
+                    "hpi_coral_ivr_score_conditioned",
+                }:
                     ivr_score_logit = logits[:, hpi_dim]
                     ivr_score_value = torch.sigmoid(ivr_score_logit)
                     if pred_ivr is None:
@@ -420,7 +444,11 @@ def save_prediction_heatmaps(
                                 hpi_pred=torch.tensor(
                                     [pred_hpi_effective], device=ivr_score_value.device
                                 ),
-                                use_hpi_gate=ivr_score_hpi_gate,
+                                use_hpi_gate=(
+                                    True
+                                    if head_type == "hpi_coral_ivr_score_conditioned"
+                                    else ivr_score_hpi_gate
+                                ),
                             )[0].item()
                         )
                     else:
@@ -596,6 +624,7 @@ def main() -> None:
     if head_type not in {
         "ordinal_coral",
         "hpi_coral_ivr_score",
+        "hpi_coral_ivr_score_conditioned",
         "hpi_coral_ivr_dual",
         "hpi_coral_ivr_dual_conditioned",
     }:

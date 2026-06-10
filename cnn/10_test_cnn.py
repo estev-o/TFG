@@ -23,7 +23,10 @@ from torchvision.models import (
     resnet18,
 )
 
-from hpi_ivr_dual_conditioned import build_conditioned_dual_model
+from hpi_ivr_dual_conditioned import (
+    build_conditioned_dual_model,
+    build_conditioned_score_model,
+)
 
 
 def parse_args() -> argparse.Namespace:
@@ -183,6 +186,14 @@ def output_dim_for_head_type(
         raise ValueError(
             "La variante hpi_coral_ivr_score no soporta target=ivr en evaluacion."
         )
+    if head_type == "hpi_coral_ivr_score_conditioned":
+        if target == "both":
+            return num_classes_hpi
+        if target == "hpi":
+            return num_classes_hpi - 1
+        raise ValueError(
+            "La variante hpi_coral_ivr_score_conditioned no soporta target=ivr en evaluacion."
+        )
     if head_type in {"hpi_coral_ivr_dual", "hpi_coral_ivr_dual_conditioned"}:
         if target == "both":
             return num_classes_hpi + 1
@@ -210,6 +221,16 @@ def build_model(
 ) -> nn.Module:
     if head_type == "hpi_coral_ivr_dual_conditioned":
         return build_conditioned_dual_model(
+            name,
+            pretrained=False,
+            num_classes_hpi=num_classes_hpi,
+            target=target,
+            ivr_conditioning_source=ivr_conditioning_source,
+            ivr_hidden_dim=ivr_conditioned_hidden_dim,
+            ivr_dropout=ivr_conditioned_dropout,
+        )
+    if head_type == "hpi_coral_ivr_score_conditioned":
+        return build_conditioned_score_model(
             name,
             pretrained=False,
             num_classes_hpi=num_classes_hpi,
@@ -356,6 +377,22 @@ def decode_predictions(
             pred = decode_ordinal_logits(logits)
             return pred.unsqueeze(1).to(torch.int64)
         raise ValueError("head_type hpi_coral_ivr_score no soporta target=ivr.")
+    if head_type == "hpi_coral_ivr_score_conditioned":
+        if target == "both":
+            hpi_dim = num_classes_hpi - 1
+            pred_hpi = decode_ordinal_logits(logits[:, :hpi_dim])
+            ivr_scores = torch.sigmoid(logits[:, hpi_dim])
+            pred_ivr = decode_ivr_score_to_class(
+                ivr_scores,
+                ivr_score_targets or {},
+                hpi_pred=pred_hpi,
+                use_hpi_gate=True,
+            )
+            return torch.stack([pred_hpi, pred_ivr], dim=1).to(torch.int64)
+        if target == "hpi":
+            pred = decode_ordinal_logits(logits)
+            return pred.unsqueeze(1).to(torch.int64)
+        raise ValueError("head_type hpi_coral_ivr_score_conditioned no soporta target=ivr.")
     if head_type in {"hpi_coral_ivr_dual", "hpi_coral_ivr_dual_conditioned"}:
         if target == "both":
             hpi_dim = num_classes_hpi - 1
@@ -404,6 +441,7 @@ def extract_pred_ivr_scores(
 ) -> Optional[torch.Tensor]:
     if head_type not in {
         "hpi_coral_ivr_score",
+        "hpi_coral_ivr_score_conditioned",
         "hpi_coral_ivr_dual",
         "hpi_coral_ivr_dual_conditioned",
     }:
@@ -411,7 +449,7 @@ def extract_pred_ivr_scores(
     if target != "both":
         return None
     hpi_dim = num_classes_hpi - 1
-    if head_type == "hpi_coral_ivr_score":
+    if head_type in {"hpi_coral_ivr_score", "hpi_coral_ivr_score_conditioned"}:
         return torch.sigmoid(logits[:, hpi_dim]).to(torch.float32)
     return torch.sigmoid(logits[:, hpi_dim + 1]).to(torch.float32)
 
@@ -796,13 +834,15 @@ def main() -> None:
     if head_type not in {
         "ordinal_coral",
         "hpi_coral_ivr_score",
+        "hpi_coral_ivr_score_conditioned",
         "hpi_coral_ivr_dual",
         "hpi_coral_ivr_dual_conditioned",
     }:
         raise RuntimeError(
             "Esta version de 10_test_cnn.py solo soporta "
             "head_type=ordinal_coral, head_type=hpi_coral_ivr_score "
-            "o head_type=hpi_coral_ivr_dual/hpi_coral_ivr_dual_conditioned."
+            "o head_type=hpi_coral_ivr_score_conditioned/"
+            "hpi_coral_ivr_dual/hpi_coral_ivr_dual_conditioned."
         )
 
     num_classes_hpi = int(config.get("num_classes_hpi", 0))
