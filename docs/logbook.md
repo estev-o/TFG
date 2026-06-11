@@ -332,3 +332,7 @@ Se implementa una nueva variante en `15_hpi_coral_ivr_dual.py` para evitar que `
 - decidir qué nota poner cuando sí hay que ponerla
 5. Con esto se busca que el modelo deje de usar `HPI` como único interruptor de `IVR`, porque en la variante anterior eso mejoraba coherencia, pero también introducía demasiados falsos negativos en la aplicabilidad de `IVR`.
 6. Se adaptaron también `10_test_cnn.py` y `11_heatmap_cnn.py` para soportar esta nueva cabeza dual.
+
+
+2026-06-10
+Grupo BIOCOST Bioloxía Costeira Sara Barrientos de la Llana y Nerea Alvite Bergara. 

@@ -849,13 +849,104 @@ configuración multisaída.
 
 \subsection{Optimización do modelo}
 \subsubsection{Ponderación e \textit{Early Stopping}}
-8 e 9
+Unha vez establecida a configuración ordinal con dúas saídas compartidas, o seguinte paso consistiu
+en modificar a función de perda para introducir unha ponderación explícita entre \texttt{HPI} e
+\texttt{IVR}. A implementación realizouse sobre a perda ordinal binaria acumulativa de ambas
+variables, esta pasou a calcularse como a suma ponderada da
+\textit{loss} ordinal de \texttt{HPI} e da de \texttt{IVR}, empregando dous coeficientes
+\texttt{w\_hpi} e \texttt{w\_ivr} normalizados. Deste xeito, puido asignárselle máis peso á parte
+de \texttt{IVR}, que xa se identificara como a máis difícil, sen alterar a arquitectura nin a lóxica
+xeral do modelo.
 
-\subsubsection{Uso de CORAL estricto}
-\textcolor{red}{\textbf{TODO: Revisar esta sección, quizás borrala.}}
-run 10
+Sobre esta base incorporouse ademais un mecanismo de \textit{early stopping}, co obxectivo de
+detectar o punto no que a validación deixaba de mellorar e evitar adestramentos máis longos do
+necesario. Para probar a efectividade destes cambios realizouse unha primeira execución que
+asemellaba o \textit{baseline} anterior, pero xa con \textit{early stopping} con paciencia 8 e
+pesos efectivos \texttt{w\_hpi=0.4}, \texttt{w\_ivr=0.6}. A continuación realizouse unha segunda
+proba, na que se reforzou lixeiramente a importancia de \texttt{IVR} mediante a combinación
+\texttt{w\_hpi=0.3}, \texttt{w\_ivr=0.7}, mantendo a mesma filosofía de adestramento e a mesma
+arquitectura base.
+
+O efecto desta modificación foi moderado pero consistente. En validación, as dúas execucións
+acadaron os mellores resultados nas primeiras épocas, o que confirma a utilidade do
+\textit{early stopping}: a primeira alcanzou o seu mellor \texttt{mae\_mean} na época 6
+(\texttt{mae\_mean}=1.1083), mentres que a run 9 o fixo na época 5
+(\texttt{mae\_mean}=1.1105). En ambos os dous casos, as últimas épocas gardadas presentaron peores
+valores de validación, polo que o criterio de \textit{early stopping} evitou prolongar innecesariamente o
+adestramento. A comparación máis relevante, non obstante, foi a realizada sobre o conxunto de test,
+tomando como referencia a run ordinal conxunta sen ponderación previa.
+
+{\rowcolors{2}{white}{udcgray!25}
+\begin{table}[htbp]
+    \centering
+    \footnotesize
+    \setlength{\tabcolsep}{4pt}
+    \begin{tabular}{p{0.22\textwidth}|p{0.11\textwidth}|p{0.11\textwidth}|p{0.11\textwidth}|p{0.12\textwidth}|p{0.20\textwidth}}
+        \rowcolor{udcpink!25}
+        \textbf{Execución} & \textbf{\texttt{mae\_mean}} & \textbf{\texttt{mae\_hpi}} & \textbf{\texttt{mae\_ivr}} & \textbf{\texttt{rmse\_ivr}} & \textbf{\texttt{within\_1\_mean}} \\\hline
+        Sen ponderación & 1.2142 & 0.5630 & 1.8653 & 3.1199 & 0.7815 \\
+        Pesos 0.4/0.6 & 1.2120 & 0.5802 & 1.8438 & 2.9878 & 0.7772 \\
+        Pesos 0.3/0.7 & 1.1908 & 0.5567 & 1.8250 & 3.1041 & 0.8087 \\
+    \end{tabular}
+    \caption{Comparativa en test entre a run ordinal conxunta sen ponderación e as dúas variantes con ponderación e \textit{early stopping}.}
+    \label{tab:comparativa-weighted-earlystopping}
+\end{table}
+}
+
+Como se observa na Táboa~\ref{tab:comparativa-weighted-earlystopping}, a introdución de pesos
+produciu melloras pequenas pero relevantes. A configuración 0.4/0.6 
+apenas modificou o erro medio global respecto da orixinal, pero reduciu o \texttt{rmse\_ivr}, o que
+suxire unha diminución dalgúns erros máis afastados nesta variable. Pola súa parte, a configuración
+0.3/0.7 foi a que ofreceu o mellor comportamento global: reduciu tanto
+\texttt{mae\_mean} como \texttt{mae\_ivr} con respecto ás dúas referencias anteriores e, ademais,
+mellorou o acerto medio dentro de $\pm 1$ punto. Aínda que o \texttt{rmse\_ivr} aumentou
+lixeiramente respecto a outra execución ponderada, o conxunto dos resultados indica que esta configuración acadou o
+mellor equilibrio entre precisión global e capacidade para priorizar \texttt{IVR}. Por este motivo,
+a configuración de pesos 0.3/0.7 pasou a considerarse a nova \textit{baseline} do traballo para as optimizacións
+posteriores.
+
 \subsubsection{Mellora de backbone}
-run 11, 12
+Unha vez fixada como \textit{baseline} a configuración ordinal con pesos 0.3/0.7 sobre
+\textit{ConvNeXt\_Tiny}, a seguinte hipótese de traballo foi que unha arquitectura de maior tamaño
+podería capturar mellor os patróns visuais asociados ás mordeduras e reducir así os erros máis
+afastados, especialmente en \texttt{IVR}. Para comprobar esta posibilidade substituíuse o
+\textit{backbone} por \textit{ConvNeXt\_Small}, mantendo o resto da configuración.
+Isto deu lugar a dúas execucións: unha primeira proba con \textit{batch size} 4 e
+unha segunda repetición con \textit{batch size} 8, ao considerarse que o primeiro resultado
+negativo podía estar condicionado pola redución do \textit{batch size}.
+
+Os resultados non confirmaron a hipótese inicial. Con \textit{batch size} empeorou claramente o resultado da \textit{baseline},
+sobre todo por un aumento do erro en \texttt{IVR}. A repetición con \textit{batch size} 8 mellorou
+parcialmente este comportamento e achegouse aos resultados da \textit{baseline}, pero sen superala de maneira
+consistente. En consecuencia, o cambio de \textit{backbone} non compensou nesta fase do traballo e
+mantívose \textit{ConvNeXt\_Tiny} como arquitectura de referencia.
+
+{\rowcolors{2}{white}{udcgray!25}
+\begin{table}[htbp]
+    \centering
+    \footnotesize
+    \setlength{\tabcolsep}{4pt}
+    \begin{tabular}{p{0.22\textwidth}|p{0.12\textwidth}|p{0.12\textwidth}|p{0.12\textwidth}|p{0.12\textwidth}|p{0.14\textwidth}}
+        \rowcolor{udcpink!25}
+        \textbf{Configuración} & \textbf{\texttt{mae\_mean}} & \textbf{\texttt{mae\_hpi}} & \textbf{\texttt{mae\_ivr}} & \textbf{\texttt{rmse\_ivr}} & \textbf{\texttt{within\_1\_mean}} \\\hline
+        \textit{Baseline} \textit{ConvNeXt\_Tiny} 0.3/0.7 & 1.1908 & 0.5567 & 1.8250 & 3.1041 & 0.8087 \\
+        \textit{ConvNeXt\_Small} \textit{batch}=4 & 1.2858 & 0.5616 & 2.0100 & 3.2231 & 0.7787 \\
+        \textit{ConvNeXt\_Small} \textit{batch}=8 & 1.2120 & 0.5874 & 1.8367 & 3.0133 & 0.7830 \\
+    \end{tabular}
+    \caption{Comparativa en test entre a \textit{baseline} con \textit{ConvNeXt\_Tiny} e as dúas probas de substitución por \textit{ConvNeXt\_Small}.}
+    \label{tab:comparativa-backbone-small}
+\end{table}
+}
+
+Ademais, a análise das matrices de confusión puxo de manifesto que seguían aparecendo erros moi
+afastados en \texttt{IVR}, por exemplo casos reais de \texttt{IVR=7} preditos como 0 ou 1, así como mostras con
+\texttt{IVR} baixo que eran inferidas como valores altos. Estes fallos prexudicaban especialmente o
+\texttt{rmse\_ivr} e non podían interpretarse sempre como un problema illado da saída de
+\texttt{IVR}, xa que en parte viñan arrastrados por erros previos na inferencia de \texttt{HPI}. Por
+este motivo, nas iteracións posteriores do traballo tratouse de abordar o problema non só mediante
+cambios de \textit{backbone}, senón tamén reformulando a avaliación e a propia representación de
+\texttt{IVR}.
+
 \subsubsection{Agrupación de IVR}
 run 12
 
