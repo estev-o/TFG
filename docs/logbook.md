@@ -280,7 +280,7 @@ Se cambió de estrategia en `13_hpi_coral_ivr_score.py` para acercarnos más a c
 
 Cómo quedó `13_hpi_coral_ivr_score.py`:
 1. `HPI` se mantiene igual que en `09_train_ordinal.py`: misma formulación ordinal tipo CORAL-like, con `K-1` logits, `BCEWithLogits` y decodificación por thresholds. Es decir, no cambiamos la parte de `HPI`.
-2. `IVR` deja de tratarse como 8 clases ordinales `0..7`. Ahora se predice como un score continuo `0..1` que representa el eje `peces <-> erizos`.
+2. `IVR` deja de tratarse como 8 clases ordinales `0..7`. Ahora se predice como un score continuo `0..1` que representa el eje `peces <-> invertebrados`.
 3. Para mapear la escala experta al score continuo se usan anclas: `1->0.00`, `2->0.05`, `3->0.25`, `4->0.50`, `5->0.75`, `6->0.95`, `7->1.00`.
 4. La loss de `IVR` se aplica solo cuando tiene sentido biológicamente, o sea en muestras con `HPI in {1,2,3,4}` y `IVR > 0`.
 5. Si `pred_hpi` cae en `0`, `5` o `6`, entonces `pred_ivr` se fuerza a `0`. Solo si `pred_hpi in {1,2,3,4}` se usa el score continuo para discretizar `IVR` a `1..7`.

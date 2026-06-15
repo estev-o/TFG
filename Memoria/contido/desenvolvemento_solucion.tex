@@ -646,6 +646,7 @@ patróns sistemáticos de confusión. Nunha primeira fase xeráronse matrices se
 concentraban na predición de \texttt{IVR}, especialmente nos erros entre niveis afastados.
 
 \subsubsection{Métricas incorporadas na avaliación posterior}
+\label{sec:metricas-avaliacion-posterior}
 A medida que avanzou o traballo, fíxose evidente que unha parte importante do erro en \texttt{IVR}
 non podía interpretarse illadamente, xa que esta variable só ten significado cando a predición de
 \texttt{HPI} indica que a avaliación de \texttt{IVR} resulta aplicable. Por este motivo,
@@ -948,10 +949,325 @@ cambios de \textit{backbone}, senón tamén reformulando a avaliación e a propi
 \texttt{IVR}.
 
 \subsubsection{Agrupación de IVR}
-run 12
+Despois de comprobar que aumentar o tamaño do \textit{backbone} non solucionaba os erros afastados
+en \texttt{IVR}, probouse unha reformulación da propia variable. A hipótese desta proba era que a
+escala completa de \texttt{IVR}, con oito valores posibles, podía estar contribuíndo ao erro polo
+número de niveis, ao forzar distincións finas e parcialmente subxectivas entre categorías próximas.
+Isto podía facer que os datos de adestramento non achegasen unha separación visual suficientemente
+consistente para inferir \texttt{IVR} con exactitude. Por este motivo, mantívose a arquitectura de
+referencia con \textit{ConvNeXt\_Tiny}, saída ordinal conxunta e pesos 0.3/0.7, pero substituíuse a
+saída de \texttt{IVR} por catro clases agrupadas: \texttt{01}, \texttt{23}, \texttt{45} e
+\texttt{67}.
+
+Esta modificación reducía a dificultade formal da tarefa de \texttt{IVR}, xa que a rede deixaba de
+ter que distinguir entre todos os niveis individuais e pasaba a predicir intervalos máis grosos. Con
+todo, esta redución tamén obriga a interpretar as métricas con cautela: un \texttt{mae\_ivr} obtido
+sobre catro clases non é directamente comparable cun \texttt{mae\_ivr} calculado sobre a escala
+orixinal de oito clases. Por iso, ademais do valor bruto, analizouse o erro normalizado polo rango
+ordinal e tamén unha comparación na que as predicións da \textit{baseline} se colapsaron ao mesmo
+esquema de catro grupos.
+
+{\rowcolors{2}{white}{udcgray!25}
+\begin{table}[htbp]
+    \centering
+    \footnotesize
+    \setlength{\tabcolsep}{4pt}
+    \begin{tabular}{p{0.25\textwidth}|p{0.18\textwidth}|p{0.14\textwidth}|p{0.16\textwidth}|p{0.16\textwidth}}
+        \rowcolor{udcpink!25}
+        \textbf{Configuración} & \textbf{Escala de \texttt{IVR}} & \textbf{\texttt{mae\_ivr}} & \textbf{\texttt{mae\_ivr} normalizado} & \textbf{\textit{Exact match} agrupado} \\\hline
+        \textit{Baseline} 0.3/0.7 & 0--7 & 1.8324 & 0.2618 & -- \\
+        \textit{Baseline} colapsada & \texttt{01/23/45/67} & 0.8009 & 0.2670 & 0.6533 \\
+        \texttt{IVR} agrupado & \texttt{01/23/45/67} & 0.8238 & 0.2746 & 0.6089 \\
+    \end{tabular}
+    \caption{Comparativa en test entre a \textit{baseline} ordinal e a reformulación de IVR en catro clases agrupadas.}
+    \label{tab:comparativa-ivr-agrupado}
+\end{table}
+}
+
+Como se observa na Táboa~\ref{tab:comparativa-ivr-agrupado}, a mellora aparente do erro bruto de
+\texttt{IVR} non pode interpretarse como unha mellora real, xa que se produce nunha escala máis
+curta. Ao normalizar polo rango ordinal, a configuración agrupada queda lixeiramente por detrás da
+\textit{baseline}. A comparación máis directa confirma a mesma tendencia: ao colapsar as predicións
+da \textit{baseline} ao esquema \texttt{01/23/45/67}, esta segue acadando un menor erro agrupado
+(\texttt{0.8009} fronte a \texttt{0.8238}) e unha maior exactitude exacta
+(\texttt{0.6533} fronte a \texttt{0.6089}).
+
+A matriz de confusión, mostrada na Figura~\ref{fig:matriz-confusion-ivr-agrupado}, confirmou ademais
+que a agrupación modificaba a distribución dos erros pero non eliminaba o problema principal. En
+particular, reduciuse o número de casos do grupo \texttt{01} preditos como \texttt{67}, que pasaron
+de 90 a 44, pero empeorou o erro inverso: as mostras reais \texttt{67} preditas como \texttt{01}
+aumentaron de 42 a 81. Polo tanto, a agrupación de \texttt{IVR} non resolveu de forma robusta a
+confusión entre extremos da escala, e decidiuse continuar explorando outras formas de incorporar a
+lóxica experta do problema.
+
+\begin{figure}[htbp]
+    \centering
+    \includegraphics[width=0.76\textwidth]{imaxes/matriz_confusion_run13.png}
+    \caption{Matriz de confusión de IVR para a execución con catro clases agrupadas.}
+    \label{fig:matriz-confusion-ivr-agrupado}
+\end{figure}
 
 \subsubsection{Aplicación da lóxica experta}
-run 13, 14 e 15
+Chegados a este punto do desenvolvemento, decidiuse aplicar a lóxica experta de forma directa na
+inferencia. Ata agora, estivéranse tratando \texttt{HPI} e \texttt{IVR} como dúas tarefas de
+clasificación ordinal. Para \texttt{HPI} esta aproximación resultaba acorde coa lóxica experta, pero
+no caso de \texttt{IVR} mesturaba dous significados distintos. Como vimos, cando
+\texttt{HPI=0}, \texttt{HPI=5} ou \texttt{HPI=6}, \texttt{IVR} debe tomar o valor \texttt{0} porque
+non aplica. Nos casos nos que si aplica, \texttt{IVR} xa non representa cantidade de dano, senón a
+posición da mostra na comparación entre marcas atribuídas a vertebrados e marcas atribuídas a
+invertebrados.
+
+Esta diferenza semántica levou a separar dous problemas que ata entón se estaban mesturando nunha
+única saída, decidir se \texttt{IVR} debe aplicarse e estimar a nota correspondente cando si aplica.
+Nesta primeira aproximación non se engadiu unha cabeza independente para decidir a aplicabilidade,
+senón que se aproveitou directamente a predición de \texttt{HPI}. Só cando \texttt{HPI} está entre
+\texttt{1} e \texttt{4} ten sentido predicir unha nota
+de \texttt{IVR}. Deste xeito, a inferencia pasou a incorporar unha restrición biolóxica que o modelo
+ordinal anterior tiña que aprender de maneira implícita.
+
+O cambio interno da CNN foi especialmente relevante. Mantívose o mesmo \textit{backbone}
+\textit{ConvNeXt\_Tiny} e a mesma cabeza ordinal para \texttt{HPI} ca nas execucións anteriores:
+para unha escala de sete clases, a rede produce \texttt{K-1} saídas asociadas aos umbrais ordinais,
+adestradas con \textit{BCEWithLogits}. A predición final de \texttt{HPI} obtense contando cantos
+destes limiares se superan, igual ca na formulación tipo CORAL empregada previamente. Polo tanto, a
+parte de \texttt{HPI} non se modificou.
+
+A diferenza apareceu na saída de \texttt{IVR}. En lugar de predicir oito clases ordinais
+\texttt{0..7}, a rede pasou a producir un único valor continuo entre \texttt{0} e \texttt{1},
+obtido mediante unha sigmoide. Este valor representa o eixo entre predominio de marcas atribuídas a
+vertebrados e predominio de marcas atribuídas a invertebrados. Para converter as etiquetas expertas
+\texttt{1..7} a este espazo continuo empregáronse as métricas expertas:
+\texttt{1->0.00}, \texttt{2->0.05}, \texttt{3->0.25}, \texttt{4->0.50},
+\texttt{5->0.75}, \texttt{6->0.95} e \texttt{7->1.00}. A perda de \texttt{IVR} calculouse mediante
+\textit{MSE}, pero só nas mostras nas que a nota tiña sentido biolóxico, é dicir, cando o
+\texttt{HPI} real pertencía ao intervalo \texttt{1..4}.
+
+Durante a inferencia, primeiro decodifícase \texttt{HPI}. Se a predición cae en \texttt{0},
+\texttt{5} ou \texttt{6}, a saída final de \texttt{IVR} fórzase a \texttt{0}. Se, pola contra, o
+\texttt{HPI} predito cae en \texttt{1..4}, úsase o valor continuo de \texttt{IVR} e asígnase á
+clase experta \texttt{1..7} cuxa nota estea máis próxima. Este comportamento fai que a rede xa
+non interprete \texttt{IVR=0} como un nivel máis da escala, senón como unha consecuencia da
+aplicabilidade deducida a partir de \texttt{HPI}.
+
+Este cambio obrigou tamén a reformular a avaliación. A métrica antiga de \texttt{IVR} sobre todas
+as mostras mantívose como referencia histórica, pero deixou de ser a lectura principal, xa que
+mestura erros de aplicabilidade con erros na nota. Por este motivo refactorizouse o \textit{script}
+de test para incorporar as métricas descritas na
+Sección~\ref{sec:metricas-avaliacion-posterior}: avaliación binaria da aplicabilidade de
+\texttt{IVR}, calidade da nota só cando \texttt{IVR} debía aplicarse e o modelo tamén a predixo, e
+consistencia interna entre \texttt{HPI} e \texttt{IVR}. Esta separación resulta clave para interpretar
+os resultados seguintes, porque un erro en \texttt{IVR} pode estar causado pola propia saída de
+\texttt{IVR}, pero tamén pode ser unha consecuencia arrastrada dunha predición incorrecta de
+\texttt{HPI}.
+
+Os resultados desta primeira variante, resumidos na Táboa~\ref{tab:comparativa-logica-experta},
+amosaron unha lectura distinta segundo se empregasen as métricas antigas ou as novas. Nas métricas
+orixinais, a \textit{baseline} ordinal seguía obtendo mellores valores de \texttt{mae\_hpi},
+\texttt{mae\_ivr} e \texttt{mae\_mean}. Con todo, esta lectura deixara de ser suficiente: o
+\texttt{mae\_ivr} calculado sobre todas as mostras mestura nun único número erros de
+aplicabilidade e erros na nota, polo que xa non reflectía ben a realidade de \texttt{IVR}.
+
+Ao aplicar a avaliación reformulada, a nova aproximación mostrou unha vantaxe máis relevante para o
+problema: a súa saída era coherente coa regra experta. A consistencia interna entre \texttt{HPI} e
+\texttt{IVR} pasou a ser perfecta, precisamente porque a regra se forza respecto do \texttt{HPI}
+predito: se o modelo predí un \texttt{HPI} no que \texttt{IVR} non debería aplicar, a saída de
+\texttt{IVR} queda a \texttt{0}; se predí un \texttt{HPI} entre \texttt{1} e \texttt{4}, permítese
+unha nota positiva. Esta consistencia, porén, non implica que a aplicabilidade sexa sempre correcta
+respecto da etiqueta real. Cando a predición de \texttt{HPI} é incorrecta, o erro pode arrastrarse
+directamente á decisión de aplicabilidade de \texttt{IVR}.
+
+{\rowcolors{2}{white}{udcgray!25}
+\begin{table}[htbp]
+    \centering
+    \footnotesize
+    \setlength{\tabcolsep}{4pt}
+    \begin{tabular}{p{0.27\textwidth}|p{0.16\textwidth}|p{0.16\textwidth}|p{0.31\textwidth}}
+        \rowcolor{udcpink!25}
+        \textbf{Métrica} & \textbf{\textit{Baseline} ordinal} & \textbf{Nova formulación} & \textbf{Lectura} \\\hline
+        \texttt{mae\_ivr} orixinal & 1.8250 & 1.9770 & Empeora, pero mestura aplicabilidade e nota de \texttt{IVR}. \\
+        Consistencia HPI-IVR & 0.9168 & 1.0000 & A nova saída respecta sempre a restrición experta. \\
+        Precisión da aplicabilidade & 0.7853 & 0.8241 & Redúcense predicións positivas incorrectas de \texttt{IVR}. \\
+        Falsos positivos de aplicabilidade & 114 & 76 & Baixa o número de casos nos que se dá nota sen deber facelo. \\
+        \textit{Recall} da aplicabilidade & 0.9392 & 0.8018 & Custo da formulación: deixa máis casos válidos sen nota. \\
+        \texttt{mae} condicional de \texttt{IVR} & 1.4293 & 1.4213 & Mantense practicamente igual no subconxunto comparable. \\
+        \texttt{rmse} condicional de \texttt{IVR} & 2.4514 & 2.0933 & Redúcese parte dos erros máis afastados cando se predí nota. \\
+    \end{tabular}
+    \caption{Comparativa entre a \textit{baseline} ordinal e a primeira variante con IVR continuo condicionado pola predición de HPI segundo a avaliación reformulada.}
+    \label{tab:comparativa-logica-experta}
+\end{table}
+}
+
+Ademais da comparación directa, a Táboa~\ref{tab:metricas-test-logica-experta} recolle as métricas
+principais que pasaron a empregarse para analizar esta nova formulación. Esta separación permite ver
+que o problema xa non se interpreta como unha única escala ordinal de \texttt{IVR}, senón como dúas
+decisións encadeadas: primeiro determinar se \texttt{IVR} aplica e despois avaliar a calidade da nota
+só nos casos nos que esa nota ten sentido.
+
+{\rowcolors{2}{white}{udcgray!25}
+\begin{table}[htbp]
+    \centering
+    \footnotesize
+    \setlength{\tabcolsep}{4pt}
+    \begin{tabular}{p{0.24\textwidth}|p{0.27\textwidth}|p{0.12\textwidth}|p{0.27\textwidth}}
+        \rowcolor{udcpink!25}
+        \textbf{Bloque de avaliación} & \textbf{Métrica} & \textbf{Valor} & \textbf{Interpretación} \\\hline
+        \texttt{HPI} ordinal & \texttt{mae\_hpi} & 0.5940 & Erro medio da tarefa ordinal de \texttt{HPI}. \\
+        Aplicabilidade de \texttt{IVR} & \textit{Accuracy} & 0.7647 & Exactitude da decisión \texttt{IVR=0} fronte a \texttt{IVR>0}. \\
+        Aplicabilidade de \texttt{IVR} & Precisión & 0.8241 & Fiabilidade cando o modelo decide dar unha nota de \texttt{IVR}. \\
+        Aplicabilidade de \texttt{IVR} & \textit{Recall} & 0.8018 & Proporción de casos reais aplicables que reciben nota. \\
+        Aplicabilidade de \texttt{IVR} & \textit{F1-score} & 0.8128 & Equilibrio entre precisión e \textit{recall}. \\
+        Nota condicional de \texttt{IVR} & Mostras avaliadas & 356 & Casos nos que \texttt{IVR} debía aplicarse e o modelo tamén deu nota. \\
+        Nota condicional de \texttt{IVR} & \texttt{mae} & 1.4213 & Erro medio da nota só no subconxunto comparable. \\
+        Nota condicional de \texttt{IVR} & \texttt{rmse} & 2.0933 & Penalización dos erros grandes na nota condicional. \\
+        Nota condicional de \texttt{IVR} & \textit{Within 2} & 0.7865 & Proporción de notas cun erro máximo de dous niveis. \\
+        Consistencia interna & HPI-IVR & 1.0000 & Ausencia de contradicións entre \texttt{HPI} predito e \texttt{IVR} final. \\
+    \end{tabular}
+    \caption{Métricas principais da avaliación reformulada para a variante con IVR continuo condicionado por HPI.}
+    \label{tab:metricas-test-logica-experta}
+\end{table}
+}
+
+Por este motivo, aínda que as métricas orixinais desen un resultado peor, esta formulación pasou a
+considerarse a nova \textit{baseline} para as seguintes probas. A decisión non se baseou nunha
+mellora directa do \texttt{mae\_ivr} antigo, senón en que esa métrica xa non representaba
+axeitadamente o problema: penalizaba de forma conxunta a aplicabilidade e a nota, cando a guía
+experta as trata como decisións diferentes. A nova formulación aseméllase máis á solución experta,
+reduce os falsos positivos de aplicabilidade, fai desaparecer as contradicións entre \texttt{HPI} e
+\texttt{IVR} e permite avaliar a nota de \texttt{IVR} só no subconxunto no que realmente ten sentido.
+
+Como seguinte comprobación, probouse unha variante na que a aplicabilidade de \texttt{IVR} xa non se
+deducía só de \texttt{HPI}, senón que se engadía unha cabeza adicional para decidir explicitamente se
+\texttt{IVR} debía tomar o valor \texttt{0} ou unha nota entre \texttt{1} e \texttt{7}. A intención
+era comprobar se unha decisión aprendida de aplicabilidade podía recuperar parte dos casos válidos
+que a formulación anterior deixaba sen nota, mantendo a saída continua para estimar a posición no
+eixo entre vertebrados e invertebrados.
+
+{\rowcolors{2}{white}{udcgray!25}
+\begin{table}[htbp]
+    \centering
+    \footnotesize
+    \setlength{\tabcolsep}{4pt}
+    \begin{tabular}{p{0.31\textwidth}|p{0.19\textwidth}|p{0.20\textwidth}|p{0.20\textwidth}}
+        \rowcolor{udcpink!25}
+        \textbf{Métrica} & \textbf{\texttt{IVR} condicionado por \texttt{HPI}} & \textbf{\texttt{IVR} con cabeza de aplicabilidade} & \textbf{Lectura} \\\hline
+        \texttt{mae\_hpi} & 0.5940 & 0.6098 & Lixeiro empeoramento en \texttt{HPI}. \\
+        Precisión da aplicabilidade & 0.8241 & 0.8172 & A cabeza adicional non mellora a fiabilidade dos positivos. \\
+        \textit{Recall} da aplicabilidade & 0.8018 & 0.8153 & Recupera algúns casos aplicables, pero de forma limitada. \\
+        Falsos positivos de aplicabilidade & 76 & 81 & Aumentan os casos nos que se dá nota sen deber facelo. \\
+        \texttt{mae} condicional de \texttt{IVR} & 1.4213 & 1.6271 & Empeora a nota de \texttt{IVR} no subconxunto comparable. \\
+        \textit{Exact match} condicional & 0.3455 & 0.1547 & Baixa moito a exactitude da nota. \\
+        Consistencia HPI-IVR & 1.0000 & 0.9541 & Reaparecen contradicións entre \texttt{HPI} e \texttt{IVR}. \\
+    \end{tabular}
+    \caption{Comparativa entre a formulación con IVR condicionado por HPI e a variante cunha cabeza adicional de aplicabilidade.}
+    \label{tab:comparativa-cabeza-aplicabilidade}
+\end{table}
+}
+
+Como se observa na Táboa~\ref{tab:comparativa-cabeza-aplicabilidade}, a cabeza adicional mellorou
+levemente o \textit{recall} de aplicabilidade, pero non resolveu o problema principal. A calidade da
+nota de \texttt{IVR} empeorou con claridade, tanto en \texttt{mae} condicional como en
+\textit{exact match}, e ademais reapareceron inconsistencias internas: nalgúns casos o modelo
+predicía un \texttt{HPI} que implicaba que \texttt{IVR} non debía aplicarse pero a cabeza de
+aplicabilidade activaba unha nota, ou ao revés. Por este motivo, descartouse esta variante. Aínda que
+a cabeza explícita era unha opción razoable desde o punto de vista de aprendizaxe automática, a
+formulación anterior seguía mellor a lóxica experta estrita e resultaba máis coherente como base para
+as probas seguintes.
+
+
+\subsection{Versión Final}
+A versión final mantivo a decisión tomada no apartado anterior, polo que a aplicabilidade final de
+\texttt{IVR} debía seguir a regra experta derivada de \texttt{HPI}, e non unha cabeza independente.
+Con todo, incorporouse un cambio importante na arquitectura para que a estimación da nota de
+\texttt{IVR} non se fixese só a partir das características visuais extraídas polo \textit{backbone}.
+A cabeza de \texttt{IVR} pasou a recibir tamén a saída ordinal de \texttt{HPI} como entrada, de modo
+que a rede puidese usar explicitamente a información que ela mesma estaba inferindo sobre o tipo de
+herbivoría.
+
+A arquitectura final emprega de novo \textit{ConvNeXt\_Tiny} preadestrado como extractor común de
+características. Sobre ese vector de características aplícase primeiro a cabeza de \texttt{HPI}, que
+se mantén igual ca nas variantes anteriores: unha capa lineal con \texttt{K-1} logits, onde
+\texttt{K=7}, adestrada mediante entropía cruzada binaria sobre os umbrais ordinais. A predición de
+\texttt{HPI} obtense aplicando unha sigmoide a estes logits e contando cantos umbrais superan
+\texttt{0.5}.
+
+A diferenza está na cabeza de \texttt{IVR}. Xa non existe unha cabeza binaria de aplicabilidade.
+Primeiro calcúlanse as probabilidades ordinais de \texttt{HPI}; despois concaténanse co vector de
+características do \textit{backbone}. Este vector combinado introdúcese nun pequeno adaptador
+formado por unha capa lineal, unha activación \textit{ReLU} e \textit{dropout} de 0.1. Finalmente,
+unha única saída produce o score continuo de \texttt{IVR}, que se transforma cunha sigmoide ao
+intervalo \texttt{0..1}. Polo tanto, a rede aprende a nota de \texttt{IVR} condicionada pola
+información ordinal de \texttt{HPI}, pero a decisión de se \texttt{IVR} aplica segue resolvéndose
+mediante unha regra fixa na inferencia.
+
+Durante o adestramento, \texttt{HPI} optimízase coa mesma perda ordinal tipo CORAL-like usada na
+\textit{baseline}. Para \texttt{IVR}, as etiquetas expertas positivas transfórmanse ao mesmo espazo
+continuo empregado nas probas anteriores:
+\texttt{1->0.00}, \texttt{2->0.05}, \texttt{3->0.25}, \texttt{4->0.50},
+\texttt{5->0.75}, \texttt{6->0.95} e \texttt{7->1.00}. A perda de \texttt{IVR} é un
+\textit{MSE} aplicado só ás mostras con \texttt{IVR>0}, é dicir, aquelas nas que a nota existe. A
+perda total mantén os pesos 0.3/0.7 entre \texttt{HPI} e \texttt{IVR}. O adestramento realizouse con
+imaxes redimensionadas a 224 píxeles, \textit{batch size} 8, \textit{AdamW}, taxa de aprendizaxe
+\texttt{0.0001}, \textit{weight decay} \texttt{0.0001}, \textit{mixed precision} e
+\textit{early stopping} con paciencia 8.
+
+Na inferencia, o proceso completo queda definido do seguinte xeito:
+
+\begin{enumerate}
+    \item A imaxe normalizada entra no \textit{backbone} \textit{ConvNeXt\_Tiny}, que produce o vector
+    de características común.
+    \item A cabeza ordinal de \texttt{HPI} produce seis logits. Tras aplicar a sigmoide, cóntanse os
+    limiares superiores a \texttt{0.5} para obter a clase final de \texttt{HPI}.
+    \item As probabilidades ordinais de \texttt{HPI} concaténanse co vector de características e
+    aliméntanse á cabeza continua de \texttt{IVR}.
+    \item A saída de \texttt{IVR} transfórmase nun score entre \texttt{0} e \texttt{1}. Se o
+    \texttt{HPI} predito pertence a \texttt{1..4}, este score asígnase á clase \texttt{1..7} coa
+    ancoraxe máis próxima.
+    \item Se o \texttt{HPI} predito é \texttt{0}, \texttt{5} ou \texttt{6}, a saída final de
+    \texttt{IVR} fórzase a \texttt{0}, independentemente do score continuo producido pola rede.
+\end{enumerate}
+
+Esta inferencia é a diferenza central da solución final: \texttt{IVR} aprende unha nota continua
+apoiándose na información de \texttt{HPI}, pero a decisión final de aplicabilidade queda aliñada coa
+guía experta. Así evítase que a rede dea unha nota positiva de \texttt{IVR} cando o seu propio
+\texttt{HPI} indica que a variable non debería aplicarse.
+
+{\rowcolors{2}{white}{udcgray!25}
+\begin{table}[htbp]
+    \centering
+    \footnotesize
+    \setlength{\tabcolsep}{4pt}
+    \begin{tabular}{p{0.33\textwidth}|p{0.18\textwidth}|p{0.18\textwidth}|p{0.21\textwidth}}
+        \rowcolor{udcpink!25}
+        \textbf{Métrica} & \textbf{\textit{Baseline} condicionada} & \textbf{Versión final} & \textbf{Lectura} \\\hline
+        \texttt{mae\_hpi} & 0.5940 & 0.5768 & Mellora lixeira en \texttt{HPI}. \\
+        Exactitude de \texttt{HPI} & 0.5925 & 0.5940 & Mantense practicamente igual. \\
+        \texttt{mae\_ivr} histórico & 1.9770 & 1.9139 & Mellora tamén na métrica antiga, aínda que non sexa a principal. \\
+        \textit{Accuracy} aplicabilidade & 0.7647 & 0.7747 & Mellora a decisión \texttt{IVR=0} fronte a \texttt{IVR>0}. \\
+        Precisión aplicabilidade & 0.8241 & 0.8225 & Mantense no mesmo nivel. \\
+        \textit{Recall} aplicabilidade & 0.8018 & 0.8243 & Recupera máis casos nos que \texttt{IVR} debía recibir nota. \\
+        Falsos negativos de aplicabilidade & 88 & 78 & Deixa menos casos válidos sen nota. \\
+        \texttt{mae} condicional de \texttt{IVR} & 1.4213 & 1.3907 & Mellora o erro medio da nota no subconxunto comparable. \\
+        \texttt{rmse} condicional de \texttt{IVR} & 2.0933 & 2.1507 & Lixeiro empeoramento nos erros máis grandes. \\
+        \textit{Exact match} condicional & 0.3455 & 0.3798 & Aumenta a proporción de notas exactas. \\
+        \textit{Within 1} condicional & 0.6489 & 0.7022 & Máis predicións quedan como máximo a un nivel. \\
+        Consistencia HPI-IVR & 1.0000 & 1.0000 & Mantense a regra experta sen contradicións. \\
+    \end{tabular}
+    \caption{Comparativa en test entre a \textit{baseline} condicionada e a versión final.}
+    \label{tab:comparativa-version-final}
+\end{table}
+}
+
+Como se observa na Táboa~\ref{tab:comparativa-version-final}, a versión final mantén a consistencia
+perfecta entre \texttt{HPI} e \texttt{IVR}, pero mellora varios puntos relevantes fronte á
+\textit{baseline} condicionada. O \textit{recall} de aplicabilidade sobe de 0.8018 a 0.8243, polo que
+se reducen os casos nos que a mostra debía ter nota de \texttt{IVR} pero o modelo a deixaba a
+\texttt{0}. Ademais, no subconxunto no que \texttt{IVR} realmente aplica e o modelo tamén predí unha
+nota, o \texttt{mae} condicional baixa de 1.4213 a 1.3907 e o \textit{within 1} sobe de 0.6489 a
+0.7022. A única lectura menos favorable é que o \texttt{rmse} condicional non mellora respecto á
+\textit{baseline} anterior, pero o conxunto das métricas indica unha solución máis equilibrada:
+mantén a lóxica experta estrita, aproveita mellor a información de \texttt{HPI} e mellora a calidade
+media da nota de \texttt{IVR}.
+
 
 \section{Integración da pipeline}
 \textcolor{red}{\textbf{TODO: Explicar como se integraron os distintos compoñentes nunha ferramenta
