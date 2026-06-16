@@ -1,9 +1,75 @@
 \chapter{Conclusións}
 \label{chap:conclusions}
 
-\lettrine{D}{erradeiro} capítulo da memoria, onde se presentará a
-situación final do traballo, as leccións aprendidas, a relación coas
-competencias da titulación en xeral e a mención en particular,
-posibles liñas futuras,\dots
+\lettrine{N}{este} derradeiro capítulo recóllese a validación realizada cos expertos a partir
+dunha reunión e dunha proba práctica do sistema. Ademais, resúmense as principais conclusións
+do traballo, analízanse as limitacións detectadas e propóñense posibles liñas futuras de mellora.
 
-\Blindtext
+\section{Validación con expertos}
+Nos últimos días de desenvolvemento do sistema, cando xa se dispoñía da versión final da CNN,
+organizouse unha reunión con expertos da Facultade de Ciencias. Máis concretamente, participaron
+membros do grupo BIOCOST (Bioloxía Costeira), que cederan o material empregado durante este
+traballo. A reunión contou coa participación de Sara Barrientos de la Llana, investigadora
+postdoutoral, e Nerea Alvite Bergara, investigadora predoutoral, ambas pertencentes ao grupo
+mencionado.
+
+\subsection{Resumo da reunión}
+A reunión comezou cunha presentación do sistema desenvolvido, na que se explicaron as métricas
+empregadas na avaliación da CNN e se mostraron os resultados obtidos coa versión final. A recepción
+foi positiva, unha vez explicado o efecto de arrastre que pode producir un erro en \texttt{HPI} sobre
+a aplicabilidade de \texttt{IVR}, así como o significado das novas métricas condicionais, o equipo
+experto indicou que os resultados eran coherentes co comportamento esperado.
+
+Aínda así, co obxectivo de realizar unha comprobación máis obxectiva, propúxose unha proba práctica:
+as dúas investigadoras avaliarían manualmente un subconxunto de 200 imaxes extraídas do
+\textit{dataset}. Este subconxunto non se xerou mediante unha mostraxe completamente aleatoria, senón
+mediante unha selección estratificada para que estivese representada toda a escala de \texttt{HPI} e,
+dentro dos casos nos que \texttt{IVR} aplica, tamén a diversidade das notas de \texttt{IVR}.
+
+Para iso, fixouse un mínimo aproximado do 10\% das imaxes para cada valor de \texttt{HPI} e, nos
+valores \texttt{1..4}, procurouse repartir tamén as mostras entre as clases positivas de
+\texttt{IVR}. Nos casos \texttt{HPI=0}, \texttt{HPI=5} e \texttt{HPI=6}, a etiqueta \texttt{IVR}
+mantívose en \texttt{0}, seguindo a lóxica experta descrita anteriormente.
+
+{\rowcolors{2}{white}{udcgray!25}
+\begin{table}[htbp]
+    \centering
+    \footnotesize
+    \setlength{\tabcolsep}{4pt}
+    \begin{tabular}{p{0.12\textwidth}|p{0.14\textwidth}|p{0.62\textwidth}}
+        \rowcolor{udcpink!25}
+        \textbf{\texttt{HPI}} & \textbf{Imaxes} & \textbf{Distribución de \texttt{IVR} dentro do grupo} \\\hline
+        0 & 34 & \texttt{IVR=0}: 34 \\
+        1 & 47 & \texttt{1}: 7, \texttt{2}: 6, \texttt{3}: 5, \texttt{4}: 5, \texttt{5}: 5, \texttt{6}: 7, \texttt{7}: 12 \\
+        2 & 27 & \texttt{1}: 5, \texttt{2}: 4, \texttt{3}: 3, \texttt{4}: 3, \texttt{5}: 3, \texttt{6}: 4, \texttt{7}: 5 \\
+        3 & 23 & \texttt{1}: 4, \texttt{2}: 3, \texttt{3}: 3, \texttt{4}: 3, \texttt{5}: 3, \texttt{6}: 3, \texttt{7}: 4 \\
+        4 & 22 & \texttt{1}: 5, \texttt{2}: 3, \texttt{3}: 3, \texttt{4}: 3, \texttt{5}: 3, \texttt{6}: 2, \texttt{7}: 3 \\
+        5 & 26 & \texttt{IVR=0}: 26 \\
+        6 & 21 & \texttt{IVR=0}: 21 \\
+    \end{tabular}
+    \caption{Distribución do subconxunto de 200 imaxes empregado para a avaliación manual por parte dos expertos.}
+    \label{tab:dataset-validacion-expertos}
+\end{table}
+}
+
+Durante a xeración deste subconxunto só se detectou unha limitación: para a combinación
+\texttt{HPI=4, IVR=6} había dúas imaxes dispoñibles, aínda que o obxectivo mínimo eran tres. Neste
+caso empregouse a mellor aproximación posible, sen alterar o tamaño total do subconxunto. Ademais,
+exportáronse dous ficheiros separados: un modelo de revisión para os expertos, sen información das
+etiquetas orixinais, e unha chave privada coas respostas para poder comparar posteriormente as
+avaliacións.
+
+Con esta avaliación manual, buscábase comprobar ata que punto o sistema desenvolvido se podía
+comparar coa avaliación experta. Ademais, a proba permitía analizar se, incluso entre expertos, a
+variabilidade da nota podía ser elevada en certos casos pola subxectividade da detección visual do
+dano ou da atribución da depredación.
+
+\subsection{Resultados da proba}
+
+\section{Conclusións do traballo}
+\subsection{Cumprimento dos obxectivos}
+\subsection{Aportacións principais}
+
+\section{Limitacións do sistema}
+
+\section{Liñas futuras}

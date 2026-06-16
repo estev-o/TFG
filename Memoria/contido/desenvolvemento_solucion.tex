@@ -1147,16 +1147,16 @@ eixo entre vertebrados e invertebrados.
     \centering
     \footnotesize
     \setlength{\tabcolsep}{4pt}
-    \begin{tabular}{p{0.31\textwidth}|p{0.19\textwidth}|p{0.20\textwidth}|p{0.20\textwidth}}
+    \begin{tabular}{p{0.40\textwidth}|p{0.24\textwidth}|p{0.24\textwidth}}
         \rowcolor{udcpink!25}
-        \textbf{Métrica} & \textbf{\texttt{IVR} condicionado por \texttt{HPI}} & \textbf{\texttt{IVR} con cabeza de aplicabilidade} & \textbf{Lectura} \\\hline
-        \texttt{mae\_hpi} & 0.5940 & 0.6098 & Lixeiro empeoramento en \texttt{HPI}. \\
-        Precisión da aplicabilidade & 0.8241 & 0.8172 & A cabeza adicional non mellora a fiabilidade dos positivos. \\
-        \textit{Recall} da aplicabilidade & 0.8018 & 0.8153 & Recupera algúns casos aplicables, pero de forma limitada. \\
-        Falsos positivos de aplicabilidade & 76 & 81 & Aumentan os casos nos que se dá nota sen deber facelo. \\
-        \texttt{mae} condicional de \texttt{IVR} & 1.4213 & 1.6271 & Empeora a nota de \texttt{IVR} no subconxunto comparable. \\
-        \textit{Exact match} condicional & 0.3455 & 0.1547 & Baixa moito a exactitude da nota. \\
-        Consistencia HPI-IVR & 1.0000 & 0.9541 & Reaparecen contradicións entre \texttt{HPI} e \texttt{IVR}. \\
+        \textbf{Métrica} & \textbf{Condicionada por \texttt{HPI}} & \textbf{Cabeza de aplicabilidade} \\\hline
+        \texttt{mae\_hpi} & 0.5940 & 0.6098 \\
+        Precisión da aplicabilidade & 0.8241 & 0.8172 \\
+        \textit{Recall} da aplicabilidade & 0.8018 & 0.8153 \\
+        Falsos positivos de aplicabilidade & 76 & 81 \\
+        \texttt{mae} condicional de \texttt{IVR} & 1.4213 & 1.6271 \\
+        \textit{Exact match} condicional & 0.3455 & 0.1547 \\
+        Consistencia HPI-IVR & 1.0000 & 0.9541 \\
     \end{tabular}
     \caption{Comparativa entre a formulación con IVR condicionado por HPI e a variante cunha cabeza adicional de aplicabilidade.}
     \label{tab:comparativa-cabeza-aplicabilidade}
@@ -1236,21 +1236,21 @@ guía experta. Así evítase que a rede dea unha nota positiva de \texttt{IVR} c
     \centering
     \footnotesize
     \setlength{\tabcolsep}{4pt}
-    \begin{tabular}{p{0.33\textwidth}|p{0.18\textwidth}|p{0.18\textwidth}|p{0.21\textwidth}}
+    \begin{tabular}{p{0.42\textwidth}|p{0.22\textwidth}|p{0.22\textwidth}}
         \rowcolor{udcpink!25}
-        \textbf{Métrica} & \textbf{\textit{Baseline} condicionada} & \textbf{Versión final} & \textbf{Lectura} \\\hline
-        \texttt{mae\_hpi} & 0.5940 & 0.5768 & Mellora lixeira en \texttt{HPI}. \\
-        Exactitude de \texttt{HPI} & 0.5925 & 0.5940 & Mantense practicamente igual. \\
-        \texttt{mae\_ivr} histórico & 1.9770 & 1.9139 & Mellora tamén na métrica antiga, aínda que non sexa a principal. \\
-        \textit{Accuracy} aplicabilidade & 0.7647 & 0.7747 & Mellora a decisión \texttt{IVR=0} fronte a \texttt{IVR>0}. \\
-        Precisión aplicabilidade & 0.8241 & 0.8225 & Mantense no mesmo nivel. \\
-        \textit{Recall} aplicabilidade & 0.8018 & 0.8243 & Recupera máis casos nos que \texttt{IVR} debía recibir nota. \\
-        Falsos negativos de aplicabilidade & 88 & 78 & Deixa menos casos válidos sen nota. \\
-        \texttt{mae} condicional de \texttt{IVR} & 1.4213 & 1.3907 & Mellora o erro medio da nota no subconxunto comparable. \\
-        \texttt{rmse} condicional de \texttt{IVR} & 2.0933 & 2.1507 & Lixeiro empeoramento nos erros máis grandes. \\
-        \textit{Exact match} condicional & 0.3455 & 0.3798 & Aumenta a proporción de notas exactas. \\
-        \textit{Within 1} condicional & 0.6489 & 0.7022 & Máis predicións quedan como máximo a un nivel. \\
-        Consistencia HPI-IVR & 1.0000 & 1.0000 & Mantense a regra experta sen contradicións. \\
+        \textbf{Métrica} & \textbf{\textit{Baseline} condicionada} & \textbf{Versión final} \\\hline
+        \texttt{mae\_hpi} & 0.5940 & 0.5768 \\
+        Exactitude de \texttt{HPI} & 0.5925 & 0.5940 \\
+        \texttt{mae\_ivr} histórico & 1.9770 & 1.9139 \\
+        \textit{Accuracy} aplicabilidade & 0.7647 & 0.7747 \\
+        Precisión aplicabilidade & 0.8241 & 0.8225 \\
+        \textit{Recall} aplicabilidade & 0.8018 & 0.8243 \\
+        Falsos negativos de aplicabilidade & 88 & 78 \\
+        \texttt{mae} condicional de \texttt{IVR} & 1.4213 & 1.3907 \\
+        \texttt{rmse} condicional de \texttt{IVR} & 2.0933 & 2.1507 \\
+        \textit{Exact match} condicional & 0.3455 & 0.3798 \\
+        \textit{Within 1} condicional & 0.6489 & 0.7022 \\
+        Consistencia HPI-IVR & 1.0000 & 1.0000 \\
     \end{tabular}
     \caption{Comparativa en test entre a \textit{baseline} condicionada e a versión final.}
     \label{tab:comparativa-version-final}
@@ -1270,5 +1270,95 @@ media da nota de \texttt{IVR}.
 
 
 \section{Integración da pipeline}
-\textcolor{red}{\textbf{TODO: Explicar como se integraron os distintos compoñentes nunha ferramenta
-usable polos expertos.}}
+Unha vez seleccionadas as versións finais do detector YOLO e da CNN, desenvolveuse un último
+\textit{script}, denominado \texttt{script\_inferencia.py}, co obxectivo de integrar todas as
+etapas anteriores nun único fluxo de traballo executable. A finalidade deste programa era
+aplicar a solución completa sobre un directorio de imaxes novas e
+producir unha saída directamente revisable polos expertos. Este \textit{script} sería o que se usa
+polos expertos, polo que debería ser sinxelo.
+
+O \textit{script} parte de tres elementos principais: o peso adestrado de YOLO, o peso adestrado da
+CNN e o ficheiro \texttt{config.json} asociado á execución final da rede. Este último ficheiro é
+necesario porque o \textit{checkpoint} da CNN non contén por si só toda a información precisa para
+reconstruír a arquitectura. Por este motivo, ao comezo da execución compróbase a presenza destes ficheiros e, se hai
+máis dun candidato, permítese seleccionar interactivamente cal debe empregarse.
+
+Despois desta comprobación inicial, o programa solicita a ruta do directorio coas imaxes que se
+queren analizar. Tamén permite escoller de forma interactiva o criterio de revisión manual entre
+conservador e estrito. Esta decisión introduciuse para que os expertos poidan distinguir entre as
+inferencias seguras e as que requiren revisión humana segundo a confianza da CNN. Os casos que se
+revisan son aqueles nos que \texttt{HPI} está preto das fronteiras \texttt{0/1} ou \texttt{4/5},
+dado que estas fronteiras son as que crean os erros de aplicabilidade que se pretenden reducir. A
+Táboa~\ref{tab:modos-revision-pipeline} resume os umbrais empregados en cada modo.
+
+{\rowcolors{2}{white}{udcgray!25}
+\begin{table}[htbp]
+    \centering
+    \footnotesize
+    \setlength{\tabcolsep}{4pt}
+    \begin{tabular}{p{0.18\textwidth}|p{0.16\textwidth}|p{0.20\textwidth}|p{0.34\textwidth}}
+        \rowcolor{udcpink!25}
+        \textbf{Modo} & \textbf{Marxe HPI} & \textbf{Rango de revisión} & \textbf{Interpretación} \\\hline
+        Conservador & 0.15 & 0.35--0.65 & Marca máis casos preto das fronteiras \texttt{0/1} e \texttt{4/5}. \\
+        Estrito & 0.05 & 0.45--0.55 & Marca unicamente os casos moi próximos ao cambio de decisión. \\
+    \end{tabular}
+    \caption{Criterios de revisión manual segundo a distancia ás fronteiras críticas de \texttt{HPI}.}
+    \label{tab:modos-revision-pipeline}
+\end{table}
+}
+
+A execución da pipeline realízase en tres fases. En primeiro lugar, aplícase YOLO a cada imaxe e
+selecciónase a caixa de maior confianza. Se non se detecta ningunha alga, se a caixa é inválida ou
+se a imaxe non pode lerse correctamente, a mostra márcase directamente como pendente de revisión.
+No caso contrario, recórtase a rexión detectada e gárdase temporalmente para a seguinte etapa.
+
+En segundo lugar, cada recorte normalízase reutilizando a mesma lóxica empregada durante o
+desenvolvemento do conxunto de adestramento. O recorte convértese a escala de grises, aplícase Otsu
+nas dúas polaridades posibles e consérvanse os compoñentes conectados relevantes, priorizando a
+opción que evita ocupar excesivamente os bordes da imaxe. A máscara resultante céntrase nun lenzo
+cadrado e redimensiónase ao tamaño común necesario para a CNN. Se a segmentación non produce unha
+máscara válida, a mostra tamén se deriva a revisión manual.
+
+Na terceira fase, as imaxes normalizadas introdúcense na CNN final. A cabeza ordinal de
+\texttt{HPI} produce seis logits, que se transforman mediante sigmoide e se decodifican contando os
+limiares superiores a \texttt{0.5}. A saída continua de \texttt{IVR} decodifícase mediante as
+ancoraxes definidas no \texttt{config.json}, pero só se utiliza cando o \texttt{HPI} predito está no
+rango \texttt{1..4}. Deste xeito, a ferramenta mantén exactamente a regra experta descrita na
+versión final do modelo e evita contradicións entre ambas variables.
+
+Como resultado, o programa xera tres ficheiros CSV. O primeiro contén todas as imaxes procesadas; o
+segundo inclúe só aquelas predicións consideradas seguras; e o terceiro recolle as mostras que
+requiren revisión humana. Co fin de que a saída sexa útil para os expertos e non dependa de detalles
+internos da implementación, estes ficheiros conteñen unicamente as columnas necesarias para a
+revisión: identificador da imaxe, predición de \texttt{HPI}, predición de \texttt{IVR}, confianza de
+\texttt{HPI}, confianza de \texttt{IVR}, confianza de YOLO, indicador de revisión e motivo polo que
+a mostra foi marcada. Entre estes motivos inclúense fallos de detección, baixa confianza do detector,
+problemas de normalización ou proximidade ás fronteiras críticas de \texttt{HPI}.
+
+Na Táboa~\ref{tab:exemplo-csv-pipeline} móstrase un exemplo simplificado do formato destes CSV. As
+dúas primeiras mostras non precisan revisión, mentres que as dúas últimas se marcan por atoparse
+preto das fronteiras de decisión que afectan á aplicabilidade de \texttt{IVR}.
+
+{\rowcolors{2}{white}{udcgray!25}
+\begin{table}[htbp]
+    \centering
+    \scriptsize
+    \setlength{\tabcolsep}{3pt}
+    \begin{tabular}{p{0.14\textwidth}|p{0.06\textwidth}|p{0.06\textwidth}|p{0.11\textwidth}|p{0.11\textwidth}|p{0.11\textwidth}|p{0.07\textwidth}|p{0.20\textwidth}}
+        \rowcolor{udcpink!25}
+        \textbf{Imaxe} & \textbf{HPI} & \textbf{IVR} & \textbf{Conf. HPI} & \textbf{Conf. IVR} & \textbf{Conf. YOLO} & \textbf{Rev.} & \textbf{Motivo} \\\hline
+        \texttt{peer\_078} & 3 & 5 & 0,1452 & 0,0808 & 0,8067 & 0 & \\
+        \texttt{peer\_079} & 5 & 0 & 0,8004 & 0,3641 & 0,7355 & 0 & \\
+        \texttt{peer\_080} & 4 & 1 & 0,6117 & 0,0033 & 0,5338 & 1 & \texttt{hpi\_boundary\_4\_5} \\
+        \texttt{peer\_081} & 0 & 0 & 0,6384 & 0,1388 & 0,5783 & 1 & \texttt{hpi\_boundary\_0\_1} \\
+    \end{tabular}
+    \caption{Exemplo do formato dos CSV xerados pola pipeline de inferencia.}
+    \label{tab:exemplo-csv-pipeline}
+\end{table}
+}
+
+Deste xeito, \texttt{script\_inferencia.py} actúa como a peza de integración final do sistema porque
+encadea detección, recorte, normalización e inferencia, aplica as regras expertas necesarias e
+produce unha saída sinxela de interpretar. Ao mesmo tempo, conserva un comportamento trazable, xa
+que cada mostra marcada para revisión indica explicitamente a causa pola que non foi considerada
+segura.
