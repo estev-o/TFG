@@ -336,3 +336,71 @@ Se implementa una nueva variante en `15_hpi_coral_ivr_dual.py` para evitar que `
 
 2026-06-10
 Grupo BIOCOST Bioloxía Costeira Sara Barrientos de la Llana y Nerea Alvite Bergara. 
+
+2026-06-16
+se implementó la pipeline y se ejecutó
+
+(.venv) estevo@estevo-UBUNTU:~/TFG$ python3 script_inferencia.py   --yolo-pt runs_yolo/kelp4/weights/best.pt   --cnn-pt cnn/runs/16_hpi_coral_ivr_condicionado/best.pt   --cnn-config cnn/runs/16_hpi_coral_ivr_condicionado/config.json
+
+Ruta del directorio de imagenes a analizar: peer_review_dataset/images
+
+Modo de revision manual:
+  1) conservador  - revisa mas casos cerca de HPI 0/1 y 4/5
+  2) solo_dudoso  - revisa solo los casos pegados a la frontera
+Elige modo [1/2]: 2
+
+Configuracion:
+  YOLO: /home/estevo/TFG/runs_yolo/kelp4/weights/best.pt
+  CNN: /home/estevo/TFG/cnn/runs/16_hpi_coral_ivr_condicionado/best.pt
+  config: /home/estevo/TFG/cnn/runs/16_hpi_coral_ivr_condicionado/config.json
+  dataset: /home/estevo/TFG/peer_review_dataset/images
+  salida: /home/estevo/TFG/inferencia_resultados/20260616_131841
+  revision: solo_dudoso (margen HPI=0.05, yolo_low_conf=0.25)
+
+1/3 Deteccion YOLO y recorte: 200 imagenes
+  Recortes validos: 200
+
+2/3 Normalizacion de recortes
+  Normalizadas validas: 200
+
+3/3 Inferencia CNN
+
+Resumen:
+  Imagenes totales: 200
+  Seguras: 197
+  Requieren revision humana: 3
+  CSV total: /home/estevo/TFG/inferencia_resultados/20260616_131841/puntuaciones_total.csv
+  CSV seguras: /home/estevo/TFG/inferencia_resultados/20260616_131841/puntuaciones_seguras.csv
+  CSV revision: /home/estevo/TFG/inferencia_resultados/20260616_131841/puntuaciones_revision_humana.csv
+(.venv) estevo@estevo-UBUNTU:~/TFG$ python3 script_inferencia.py   --yolo-pt runs_yolo/kelp4/weights/best.pt   --cnn-pt cnn/runs/16_hpi_coral_ivr_condicionado/best.pt   --cnn-config cnn/runs/16_hpi_coral_ivr_condicionado/config.json
+
+Ruta del directorio de imagenes a analizar: peer_review_dataset/images
+
+Modo de revision manual:
+  1) conservador  - revisa mas casos cerca de HPI 0/1 y 4/5
+  2) solo_dudoso  - revisa solo los casos pegados a la frontera
+Elige modo [1/2]: 1
+
+Configuracion:
+  YOLO: /home/estevo/TFG/runs_yolo/kelp4/weights/best.pt
+  CNN: /home/estevo/TFG/cnn/runs/16_hpi_coral_ivr_condicionado/best.pt
+  config: /home/estevo/TFG/cnn/runs/16_hpi_coral_ivr_condicionado/config.json
+  dataset: /home/estevo/TFG/peer_review_dataset/images
+  salida: /home/estevo/TFG/inferencia_resultados/20260616_132050
+  revision: conservador (margen HPI=0.15, yolo_low_conf=0.40)
+
+1/3 Deteccion YOLO y recorte: 200 imagenes
+  Recortes validos: 200
+
+2/3 Normalizacion de recortes
+  Normalizadas validas: 200
+
+3/3 Inferencia CNN
+
+Resumen:
+  Imagenes totales: 200
+  Seguras: 185
+  Requieren revision humana: 15
+  CSV total: /home/estevo/TFG/inferencia_resultados/20260616_132050/puntuaciones_total.csv
+  CSV seguras: /home/estevo/TFG/inferencia_resultados/20260616_132050/puntuaciones_seguras.csv
+  CSV revision: /home/estevo/TFG/inferencia_resultados/20260616_132050/puntuaciones_revision_humana.csv

@@ -39,6 +39,7 @@ Thumbs.db
 /dateset-segmentado/
 
 /peer_review_dataset/
+/inferencia_resultados
 
 #Openvpn
 *.ovpn
