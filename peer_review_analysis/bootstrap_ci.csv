@@ -1,0 +1,7 @@
+metric,bootstrap_iterations,mean,ci95_low,ci95_high
+human_variability_hpi_pairwise_mae,1000,0.393783,0.333333,0.46
+human_variability_ivr_app_disagreement_rate,1000,0.160325,0.11,0.215
+system_vs_original_hpi_mae,1000,0.36139,0.255,0.48
+system_vs_original_ivr_cond_mae,1000,1.025732,0.837838,1.227273
+sara_vs_nerea_hpi_mae,1000,0.190315,0.135,0.25
+sara_vs_nerea_ivr_cond_mae,1000,0.500902,0.331034,0.70073

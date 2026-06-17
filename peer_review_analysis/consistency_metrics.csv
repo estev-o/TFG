@@ -1,0 +1,5 @@
+rater,n,missing,consistency_accuracy,inconsistent_total,positive_when_hpi_not_applicable,zero_when_hpi_applicable
+original,200,0,1.0,0,0,0
+sara,198,2,1.0,0,0,0
+nerea,199,1,1.0,0,0,0
+system,200,0,1.0,0,0,0
