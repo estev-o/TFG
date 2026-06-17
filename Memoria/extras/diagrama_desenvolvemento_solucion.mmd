@@ -1,0 +1,95 @@
+%%{init: {
+  "theme": "base",
+  "flowchart": {
+    "htmlLabels": true,
+    "curve": "basis",
+    "nodeSpacing": 34,
+    "rankSpacing": 42,
+    "padding": 8
+  },
+  "themeVariables": {
+    "fontFamily": "Linux Libertine O, Libertine, Georgia, serif",
+    "fontSize": "16px",
+    "lineColor": "#4b5563",
+    "textColor": "#111827",
+    "primaryTextColor": "#111827",
+    "primaryBorderColor": "#1f77b4",
+    "primaryColor": "#e8f1fb",
+    "secondaryColor": "#edf7f6",
+    "tertiaryColor": "#f6f8fa",
+    "background": "transparent",
+    "mainBkg": "#f6f8fa",
+    "clusterBkg": "#ffffff",
+    "clusterBorder": "#cbd5e1",
+    "edgeLabelBackground": "#ffffff"
+  }
+}}%%
+
+flowchart TD
+    A([Dataset inicial<br/>imaxes + Excel experto])
+
+    B["1. Preprocesado dos datos<br/><code>01_script_filtro.py</code><br/>validación de Photo_cod, HPI e IVR<br/>poda posterior con regras expertas"]
+
+    C{"2. Como localizar a alga?"}
+    C1["OpenCV clásico<br/><code>02_recortar_algas.py</code><br/>Canny · cor · contornos · Hough · Otsu"]
+    C2["Descartado<br/>~40% de detección correcta<br/>fallos con regras, sombras e anotacións"]
+    C3["YOLOv8n<br/><code>04_recortar_yolo.py</code><br/>propostas automáticas + revisión manual<br/>636 train · 146 val"]
+    C4["Adestramento YOLO<br/><code>05_entrenar_yolo.py</code><br/>60 épocas · imgsz 640 · batch 8<br/>mAP@50 = 0.995"]
+    C5["Aplicación ao dataset<br/><code>06_aplicar_yolo.py</code><br/>4710 recortes · revisión visual<br/>4650 recortes válidos"]
+
+    D["3. Normalización<br/><code>07_normalizar_recortes.py</code><br/>Otsu en dúas polaridades<br/>compoñentes conectados<br/>lenzo cadrado + máscara binaria<br/>4645 imaxes normalizadas"]
+
+    E["4. Preparación para a CNN<br/><code>08_build_split_manifest.py</code><br/>manifest + partición reproducible<br/>3250 train · 697 val · 698 test"]
+
+    F{"5. Primeira formulación da CNN"}
+    F1["Regresión libre<br/><code>09_train_regression.py</code><br/>saídas continuas para HPI e IVR"]
+    F2["Comparación de backbones<br/>EfficientNet-B0 · ResNet18 · ConvNeXt_Tiny"]
+    F3["ConvNeXt_Tiny seleccionado<br/>mellor equilibrio global<br/>IVR segue con erro elevado"]
+
+    G{"6. Reformulación ordinal"}
+    G1["CORAL-CNN adaptado<br/>saídas acumulativas K-1<br/>para variables ordinais"]
+    G2["Comparación de saídas<br/>CNNs separadas vs CNN conxunta"]
+    G3["CNN conxunta seleccionada<br/>backbone compartido<br/>dúas cabezas ordinais"]
+    G4["Ponderación e early stopping<br/>pesos 0.3 HPI / 0.7 IVR<br/>paciencia 8"]
+
+    H{"7. Iteracións sobre IVR"}
+    H1["ConvNeXt_Small<br/>descartado: máis custo<br/>sen mellora consistente"]
+    H2["IVR agrupado<br/>01 / 23 / 45 / 67<br/>descartado: non mellora o erro normalizado"]
+    H3["Lóxica experta de aplicabilidade<br/>IVR só aplica se HPI está en 1..4"]
+    H4["Avaliación reformulada<br/>aplicabilidade de IVR<br/>nota condicional<br/>consistencia HPI-IVR"]
+    H5["Cabeza explícita de aplicabilidade<br/>descartada: peor nota condicional<br/>e inconsistencias HPI-IVR"]
+
+    I["8. Versión final da CNN<br/>ConvNeXt_Tiny<br/>HPI ordinal<br/>IVR continuo condicionado polas probabilidades de HPI<br/>regra experta fixa na inferencia"]
+
+    J["9. Integración final<br/><code>script_inferencia.py</code><br/>YOLO + normalización + CNN<br/>CSV global · CSV seguras · CSV revisión"]
+
+    K([Solución final<br/>pipeline executable para expertas])
+
+    A --> B --> C
+    C --> C1 --> C2
+    C --> C3 --> C4 --> C5
+    C5 --> D --> E --> F
+    F --> F1 --> F2 --> F3 --> G
+    G --> G1 --> G2 --> G3 --> G4 --> H
+    H --> H1
+    H --> H2
+    H --> H3 --> H4 --> H5 --> I
+    I --> J --> K
+
+    classDef startEnd fill:#e8f1fb,stroke:#1f77b4,stroke-width:1.4px,color:#111827;
+    classDef data fill:#f6f8fa,stroke:#425466,stroke-width:1.1px,color:#111827;
+    classDef detect fill:#edf7f6,stroke:#2a8c8c,stroke-width:1.2px,color:#111827;
+    classDef norm fill:#f0f7ed,stroke:#3f8f3f,stroke-width:1.2px,color:#111827;
+    classDef model fill:#f4eef8,stroke:#7a4aa0,stroke-width:1.2px,color:#111827;
+    classDef decision fill:#fff7df,stroke:#b7791f,stroke-width:1.2px,color:#111827;
+    classDef rejected fill:#fdecef,stroke:#c23b75,stroke-width:1.2px,color:#111827;
+    classDef final fill:#e8f1fb,stroke:#1f77b4,stroke-width:1.4px,color:#111827;
+
+    class A,K startEnd;
+    class B,E data;
+    class C,C1,C3,C4,C5 detect;
+    class D norm;
+    class F,F1,F2,F3,G,G1,G2,G3,G4,H,H3,H4,I model;
+    class C,F,G,H decision;
+    class C2,H1,H2,H5 rejected;
+    class J final;

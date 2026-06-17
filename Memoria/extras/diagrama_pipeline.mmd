@@ -1,0 +1,72 @@
+%%{init: {
+  "theme": "base",
+  "flowchart": {
+    "htmlLabels": true,
+    "curve": "basis",
+    "nodeSpacing": 28,
+    "rankSpacing": 34,
+    "padding": 8
+  },
+  "themeVariables": {
+    "fontFamily": "Linux Libertine O, Libertine, Georgia, serif",
+    "fontSize": "17px",
+    "lineColor": "#4b5563",
+    "textColor": "#111827",
+    "primaryTextColor": "#111827",
+    "primaryBorderColor": "#1f77b4",
+    "primaryColor": "#e8f1fb",
+    "secondaryColor": "#edf7f6",
+    "tertiaryColor": "#f6f8fa",
+    "background": "transparent",
+    "mainBkg": "#f6f8fa",
+    "clusterBkg": "#ffffff",
+    "edgeLabelBackground": "#ffffff"
+  }
+}}%%
+
+flowchart TD
+    A([Inicio: script_inferencia.py]) --> B["Cargar ou seleccionar recursos<br/>- pesos de YOLO<br/>- checkpoint da CNN<br/>- config.json da execución final"]
+    B --> C["Indicar directorio coas imaxes novas"]
+    C --> D["Escoller perfil de revisión<br/>conservador / estrito"]
+    D --> E{{"Para cada imaxe"}}
+
+    E --> F["Ler imaxe"]
+    F --> G{"A imaxe lese correctamente?"}
+    G -- "Non" --> R1["Marcar para revisión<br/>Motivo: erro de lectura"]
+    G -- "Si" --> H["Aplicar YOLOv8n"]
+
+    H --> I["Seleccionar a caixa de maior confianza"]
+    I --> J{"Detección válida<br/>e confianza suficiente?"}
+    J -- "Non" --> R2["Marcar para revisión<br/>Motivo: sen detección,<br/>caixa inválida ou baixa confianza YOLO"]
+    J -- "Si" --> K["Recortar a rexión da alga"]
+
+    K --> L["Normalizar recorte<br/>escala de grises<br/>Otsu en dúas polaridades<br/>compoñentes conectados<br/>centrado en lenzo cadrado<br/>redimensionado para a CNN"]
+    L --> M{"Máscara válida?"}
+    M -- "Non" --> R3["Marcar para revisión<br/>Motivo: fallo de normalización"]
+    M -- "Si" --> N["CNN final<br/>ConvNeXt_Tiny como extractor común"]
+
+    N --> O["Cabeza ordinal de HPI<br/>6 logits -> sigmoide<br/>clase = umbrais > 0.5"]
+    O --> P["Concatenar características visuais<br/>coas probabilidades ordinais de HPI"]
+    P --> Q["Cabeza continua de IVR<br/>score no intervalo 0..1"]
+
+    Q --> S{"HPI predito está en 1..4?"}
+    S -- "Si" --> U["Asignar IVR entre 1 e 7<br/>según o nivel máis próximo<br/>seguindo a lóxica experta"]
+    S -- "Non: HPI 0, 5 ou 6" --> T["Forzar IVR = 0<br/>regra experta de aplicabilidade"]
+
+    U --> V["Calcular confianzas<br/>HPI, IVR e YOLO"]
+    T --> V
+
+    V --> W{"HPI preto das fronteiras críticas<br/>0/1 ou 4/5?"}
+    W -- "Si" --> R4["Marcar para revisión<br/>Motivo: fronteira crítica de HPI"]
+    W -- "Non" --> X["Predición segura"]
+
+    R1 --> Y["Engadir fila ao CSV global"]
+    R2 --> Y
+    R3 --> Y
+    R4 --> Y
+    X --> Y
+
+    Y --> Z{"Quedan imaxes?"}
+    Z -- "Si" --> E
+    Z -- "Non" --> AA["Xerar tres CSV<br/>1. todas as imaxes procesadas<br/>2. predicións seguras<br/>3. mostras para revisión humana"]
+    AA --> AB([Fin])

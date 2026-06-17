@@ -1,0 +1,7 @@
+subset,n_samples,hpi_pairwise_mae_experts_original,hpi_mean_range_experts_original,hpi_any_disagreement_rate,ivr_legacy_pairwise_mae_experts_original,ivr_legacy_mean_range_experts_original,ivr_legacy_any_disagreement_rate,ivr_app_disagreement_rate,ivr_app_disagreement_count,ivr_app_comparable_count
+all,200,0.393333,0.59,0.495,1.442761,2.175,0.58,0.16,32,200
+solo_dudoso_flagged,3,0.222222,0.333333,0.333333,1.285714,2.666667,0.666667,0.333333,1,3
+conservador_flagged,15,0.577778,0.866667,0.6,2.162791,3.333333,0.733333,0.4,6,15
+conservador_extra,12,0.666667,1.0,0.666667,2.333333,3.5,0.75,0.416667,5,12
+safe_in_conservador,185,0.378378,0.567568,0.486486,1.38657,2.081081,0.567568,0.140541,26,185
+safe_in_solo_dudoso,197,0.395939,0.593909,0.497462,1.444634,2.167513,0.57868,0.15736,31,197

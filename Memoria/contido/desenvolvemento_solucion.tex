@@ -1345,6 +1345,19 @@ Táboa~\ref{tab:modos-revision-pipeline} resume os umbrais empregados en cada mo
 \end{table}
 }
 
+De forma esquemática, a Figura~\ref{fig:diagrama-pipeline} resume o funcionamento completo da
+\textit{pipeline} de inferencia, dende a carga dos modelos ata a creación dos ficheiros CSV finais.
+Co fin de facilitar a lectura do fluxo, o diagrama represéntase nunha páxina independente.
+
+\clearpage
+\begin{figure}[p]
+    \centering
+    \includegraphics[height=0.92\textheight,keepaspectratio]{imaxes/diagrama_pipeline.pdf}
+    \caption{Diagrama de fluxo da \textit{pipeline} de inferencia desenvolvida.}
+    \label{fig:diagrama-pipeline}
+\end{figure}
+\clearpage
+
 A execución da pipeline realízase en tres fases. En primeiro lugar, aplícase YOLO a cada imaxe e
 selecciónase a caixa de maior confianza. Se non se detecta ningunha alga, se a caixa é inválida ou
 se a imaxe non pode lerse correctamente, a mostra márcase directamente como pendente de revisión.

@@ -1,0 +1,133 @@
+digraph pipeline {
+  graph [
+    rankdir=TB,
+    bgcolor="transparent",
+    pad=0.22,
+    nodesep=0.42,
+    ranksep=0.52,
+    splines=ortho
+  ];
+
+  node [
+    shape=rect,
+    style="rounded,filled",
+    fontname="Linux Libertine O",
+    fontsize=22,
+    margin="0.16,0.11",
+    color="#425466",
+    penwidth=1.3,
+    fillcolor="#f6f8fa"
+  ];
+
+  edge [
+    fontname="Linux Libertine O",
+    fontsize=18,
+    color="#586069",
+    arrowsize=0.8
+  ];
+
+  start [
+    label="Inicio da pipeline\nscript_inferencia.py",
+    shape=oval,
+    fillcolor="#e8f1fb",
+    color="#1f77b4"
+  ];
+
+  config [
+    label="Configuración inicial\npesos de YOLO, checkpoint da CNN,\nconfig.json, directorio de imaxes\ne perfil de revisión",
+    fillcolor="#e8f1fb",
+    color="#1f77b4"
+  ];
+
+  image [
+    label="Para cada imaxe\nlectura e validación básica",
+    fillcolor="#fff3e6",
+    color="#d97927"
+  ];
+
+  yolo [
+    label="Detección con YOLOv8n\nselección da caixa de maior confianza\ne recorte da rexión da alga",
+    fillcolor="#edf7f6",
+    color="#2a8c8c"
+  ];
+
+  yolo_ok [
+    label="Detección válida?",
+    shape=diamond,
+    width=2.5,
+    fillcolor="#fff9db",
+    color="#b7791f"
+  ];
+
+  norm [
+    label="Normalización do recorte\nescala de grises, Otsu en dúas polaridades,\ncompoñentes conectados, centrado\ne redimensionado para a CNN",
+    fillcolor="#f0f7ed",
+    color="#3f8f3f"
+  ];
+
+  norm_ok [
+    label="Máscara válida?",
+    shape=diamond,
+    width=2.4,
+    fillcolor="#fff9db",
+    color="#b7791f"
+  ];
+
+  cnn [
+    label="Inferencia coa CNN final\nConvNeXt_Tiny extrae características visuais\nCabeza ordinal: HPI\nCabeza continua condicionada: IVR",
+    fillcolor="#f4eef8",
+    color="#7a4aa0"
+  ];
+
+  ivr_rule [
+    label="Regra experta de aplicabilidade\nse HPI está en 1..4, IVR toma a ancoraxe máis próxima\nse HPI é 0, 5 ou 6, IVR fórzase a 0",
+    fillcolor="#f4eef8",
+    color="#7a4aa0"
+  ];
+
+  review_check [
+    label="A predición require revisión?",
+    shape=diamond,
+    width=3.1,
+    fillcolor="#fff9db",
+    color="#b7791f"
+  ];
+
+  safe [
+    label="Predición segura\nHPI, IVR e confianzas",
+    fillcolor="#eaf7ea",
+    color="#3f8f3f"
+  ];
+
+  review [
+    label="Mostra para revisión humana\nmotivo explícito: erro de lectura,\nsen detección, baixa confianza YOLO,\nfallo de normalización ou fronteira crítica de HPI",
+    fillcolor="#fdecec",
+    color="#c23b75"
+  ];
+
+  csv [
+    label="Saída da ferramenta\nCSV global con todas as imaxes\nCSV de predicións seguras\nCSV de mostras para revisión",
+    fillcolor="#e8f1fb",
+    color="#1f77b4"
+  ];
+
+  end [
+    label="Fin",
+    shape=oval,
+    fillcolor="#e8f1fb",
+    color="#1f77b4"
+  ];
+
+  start -> config -> image -> yolo -> yolo_ok;
+  yolo_ok -> norm [label="Si"];
+  yolo_ok -> review [label="Non"];
+  norm -> norm_ok;
+  norm_ok -> cnn [label="Si"];
+  norm_ok -> review [label="Non"];
+  cnn -> ivr_rule -> review_check;
+  review_check -> safe [label="Non"];
+  review_check -> review [label="Si"];
+  safe -> csv;
+  review -> csv;
+  csv -> end;
+}
