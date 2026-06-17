@@ -32,7 +32,7 @@ soporte ao labor experto.
 \section{Achegamento do problema}
 O problema que se aborda, tal e como se estableceu na contextualización, consiste en implementar
 unha solución que asista os expertos en bioloxía na cuantificación e clasificación de danos en
-algas laminarias. Para iso, dispoñemos dun \textit{dataset} cedido polo \textcolor{red}{\textbf{TODO: Introducir o nome do departamento específico que cedeu as fotos.}},
+algas laminarias. Para iso, dispoñemos dun \textit{dataset} cedido polo grupo BIOCOST (Bioloxía Costeira) da Facultade de Ciencias da UDC,
 no que se recollen fotografías que, aínda que comparten certos elementos comúns, como un plano
 cenital e un fondo semellante (mesa branca), non foron obtidas baixo un procedemento de captura
 completamente estandarizado. Existen imaxes que exceden os límites da mesa e deixan ver o fondo,
@@ -84,5 +84,53 @@ a exactitude na inferencia e a facilidade de uso.
 \end{itemize}
 
 
-\section{Estrutura do traballo}
-\textcolor{red}{\textbf{TODO: Describir a estrutura final da memoria cando os capítulos estean pechados.}}
+\section{Enxeñaría de desenvolvemento}
+
+Desde o punto de vista da enxeñaría de desenvolvemento, o traballo organizouse como un proceso
+iterativo e incremental. Nun primeiro momento dividiuse o problema global nas mesmas grandes fases
+que estruturan esta memoria: análise do dominio e do conxunto de datos, preparación das imaxes,
+detección e recorte das algas, normalización dos recortes, deseño dos modelos de aprendizaxe
+profunda, avaliación experimental e integración final da \textit{pipeline}. Esta división permitiu
+traballar sobre obxectivos máis acoutados e validar cada decisión antes de incorporala ao sistema
+completo.
+
+O desenvolvemento non seguiu unha secuencia estritamente lineal. Aínda que as fases principais se
+presentan de maneira ordenada, en varias ocasións foi necesario volver sobre decisións previas a
+partir dos resultados obtidos. Por exemplo, a primeira análise dos recortes xerados automaticamente
+serviu para detectar erros de segmentación e motivou unha etapa posterior de revisión e curación dos
+datos. Do mesmo xeito, os resultados iniciais da \gls{cnn} levaron a reformular a saída do modelo,
+comparar diferentes arquitecturas e introducir a lóxica experta asociada á aplicabilidade de
+\gls{ivr}. Polo tanto, cada bloque do sistema foi refinándose mediante ciclos de implementación,
+avaliación e corrección.
+
+As primeiras semanas dedicáronse á comprensión do problema biolóxico, á revisión das variables
+incluídas no \textit{dataset} e á identificación das dificultades presentes nas imaxes reais. A
+partir desta análise abordouse a preparación dos datos: primeiro mediante unha limpeza inicial e,
+posteriormente, mediante a detección automática da rexión ocupada pola alga con YOLO. Esta etapa
+permitiu separar o problema de localización do problema de estimación do dano, reducindo a
+variabilidade visual que tería que asumir directamente a rede de clasificación.
+
+Unha vez obtidos os recortes, o esforzo centrouse na súa normalización e revisión. Esta fase foi
+especialmente relevante porque o conxunto de datos non procedía dun protocolo de captura
+completamente controlado, polo que existían diferenzas de iluminación, escala, orientación e fondo.
+Tras dispoñer dun conxunto de entrada máis homoxéneo, desenvolvéronse as primeiras versións da
+\gls{cnn}, preparáronse os particionamentos de adestramento, validación e proba, e comparáronse
+distintas formulacións do problema.
+
+Na parte final do traballo, o desenvolvemento concentrouse na mellora da estimación de \gls{hpi} e
+\gls{ivr}, na análise dos erros máis frecuentes e na integración da solución nunha \textit{pipeline}
+de inferencia usable. Finalmente, realizouse unha validación con expertas sobre un subconxunto de
+imaxes, o que permitiu contrastar o comportamento do sistema co criterio humano e contextualizar as
+limitacións observadas.
+
+\begin{figure}[htbp]
+    \centering
+    \includegraphics[width=\textwidth]{imaxes/cronograma_gantt.pdf}
+    \caption{Cronograma aproximado das principais fases de desenvolvemento do traballo.}
+    \label{fig:cronograma-gantt}
+\end{figure}
+
+Na Figura~\ref{fig:cronograma-gantt} móstrase a planificación temporal aproximada seguida durante o
+proxecto. O solapamento entre varias tarefas reflicte precisamente o carácter iterativo do proceso:
+mentres unha fase se pechaba, os resultados obtidos condicionaban axustes nas fases anteriores ou
+servían de entrada para a seguinte iteración.

@@ -6,6 +6,7 @@ dunha reunión e dunha proba práctica do sistema. Ademais, resúmense as princi
 do traballo, analízanse as limitacións detectadas e propóñense posibles liñas futuras de mellora.
 
 \section{Validación con expertos}
+\label{validacion-con-expertos}
 Nos últimos días de desenvolvemento do sistema, cando xa se dispoñía da versión final da CNN,
 organizouse unha reunión con expertos da Facultade de Ciencias. Máis concretamente, participaron
 membros do grupo BIOCOST (Bioloxía Costeira), que cederan o material empregado durante este
@@ -16,7 +17,7 @@ mencionado.
 \subsection{Resumo da reunión}
 A reunión comezou cunha presentación do sistema desenvolvido, na que se explicaron as métricas
 empregadas na avaliación da CNN e se mostraron os resultados obtidos coa versión final. A recepción
-foi positiva, unha vez explicado o efecto de arrastre que pode producir un erro en \texttt{HPI} sobre
+foi positiva unha vez explicado o efecto de arrastre que un erro en \texttt{HPI} pode producir sobre
 a aplicabilidade de \texttt{IVR}, así como o significado das novas métricas condicionais, o equipo
 experto indicou que os resultados eran coherentes co comportamento esperado.
 
@@ -35,17 +36,19 @@ mantívose en \texttt{0}, seguindo a lóxica experta descrita anteriormente.
 \begin{table}[htbp]
     \centering
     \footnotesize
-    \setlength{\tabcolsep}{4pt}
-    \begin{tabular}{p{0.12\textwidth}|p{0.14\textwidth}|p{0.62\textwidth}}
+    \setlength{\tabcolsep}{3pt}
+    \begin{tabular}{p{0.08\textwidth}|p{0.10\textwidth}|*{8}{p{0.06\textwidth}}}
         \rowcolor{udcpink!25}
-        \textbf{\texttt{HPI}} & \textbf{Imaxes} & \textbf{Distribución de \texttt{IVR} dentro do grupo} \\\hline
-        0 & 34 & \texttt{IVR=0}: 34 \\
-        1 & 47 & \texttt{1}: 7, \texttt{2}: 6, \texttt{3}: 5, \texttt{4}: 5, \texttt{5}: 5, \texttt{6}: 7, \texttt{7}: 12 \\
-        2 & 27 & \texttt{1}: 5, \texttt{2}: 4, \texttt{3}: 3, \texttt{4}: 3, \texttt{5}: 3, \texttt{6}: 4, \texttt{7}: 5 \\
-        3 & 23 & \texttt{1}: 4, \texttt{2}: 3, \texttt{3}: 3, \texttt{4}: 3, \texttt{5}: 3, \texttt{6}: 3, \texttt{7}: 4 \\
-        4 & 22 & \texttt{1}: 5, \texttt{2}: 3, \texttt{3}: 3, \texttt{4}: 3, \texttt{5}: 3, \texttt{6}: 2, \texttt{7}: 3 \\
-        5 & 26 & \texttt{IVR=0}: 26 \\
-        6 & 21 & \texttt{IVR=0}: 21 \\
+        \textbf{\texttt{HPI}} & \textbf{Imaxes} & \multicolumn{8}{c}{\textbf{Distribución de \texttt{IVR}}} \\\hline
+        \rowcolor{udcpink!25}
+        & & \textbf{\texttt{0}} & \textbf{\texttt{1}} & \textbf{\texttt{2}} & \textbf{\texttt{3}} & \textbf{\texttt{4}} & \textbf{\texttt{5}} & \textbf{\texttt{6}} & \textbf{\texttt{7}} \\\hline
+        0 & 34 & 34 & 0 & 0 & 0 & 0 & 0 & 0 & 0 \\
+        1 & 47 & 0 & 7 & 6 & 5 & 5 & 5 & 7 & 12 \\
+        2 & 27 & 0 & 5 & 4 & 3 & 3 & 3 & 4 & 5 \\
+        3 & 23 & 0 & 4 & 3 & 3 & 3 & 3 & 3 & 4 \\
+        4 & 22 & 0 & 5 & 3 & 3 & 3 & 3 & 2 & 3 \\
+        5 & 26 & 26 & 0 & 0 & 0 & 0 & 0 & 0 & 0 \\
+        6 & 21 & 21 & 0 & 0 & 0 & 0 & 0 & 0 & 0 \\
     \end{tabular}
     \caption{Distribución do subconxunto de 200 imaxes empregado para a avaliación manual por parte dos expertos.}
     \label{tab:dataset-validacion-expertos}
@@ -56,20 +59,301 @@ Durante a xeración deste subconxunto só se detectou unha limitación: para a c
 \texttt{HPI=4, IVR=6} había dúas imaxes dispoñibles, aínda que o obxectivo mínimo eran tres. Neste
 caso empregouse a mellor aproximación posible, sen alterar o tamaño total do subconxunto. Ademais,
 exportáronse dous ficheiros separados: un modelo de revisión para os expertos, sen información das
-etiquetas orixinais, e unha chave privada coas respostas para poder comparar posteriormente as
+etiquetas orixinais, e un CSV privado coas respostas para poder comparar posteriormente as
 avaliacións.
 
 Con esta avaliación manual, buscábase comprobar ata que punto o sistema desenvolvido se podía
-comparar coa avaliación experta. Ademais, a proba permitía analizar se, incluso entre expertos, a
+comparar coa avaliación experta. Ademais, a proba permitía analizar se, mesmo entre persoas expertas, a
 variabilidade da nota podía ser elevada en certos casos pola subxectividade da detección visual do
 dano ou da atribución da depredación.
 
 \subsection{Resultados da proba}
 
+Unha vez se recibiu a resposta das investigadoras, realizouse a inferencia das mesmas 200 imaxes por
+parte do noso sistema. Esta execución fíxose cos dous perfís de revisión manual descritos no
+capítulo anterior: \texttt{solo\_dudoso} e \texttt{conservador}. Cómpre sinalar que estes dous
+perfís non modifican a predición da CNN, senón unicamente o criterio empregado para marcar unha
+mostra como potencialmente revisable. De feito, nas 200 imaxes avaliadas as predicións de
+\texttt{HPI} e \texttt{IVR} foron idénticas nos dous perfís; a única diferenza foi o número de
+imaxes sinaladas para revisión, con 3 casos no perfil \texttt{solo\_dudoso} e 15 no perfil
+\texttt{conservador}.
+
+\subsubsection{Variabilidade entre expertas}
+En primeiro lugar analizouse o grao de acordo entre as dúas investigadoras e a súa relación coa
+etiqueta orixinal do \textit{dataset}. Esta análise é importante porque a etiqueta orixinal non debe
+interpretarse como unha medida física exacta, senón como unha avaliación experta previa. Polo tanto,
+antes de valorar o sistema é necesario coñecer que marxe de variabilidade aparece cando diferentes
+persoas expertas revisan as mesmas imaxes.
+
+Para \texttt{HPI} empregáronse métricas ordinais directas: \textit{MAE}, exactitude e acerto dentro
+de $\pm 1$ punto. Para \texttt{IVR}, mantendo a formulación
+descrita na Sección~\ref{sec:metricas-avaliacion-posterior}, separouse a aplicabilidade
+(\texttt{IVR=0} fronte a \texttt{IVR=1..7}) da calidade da nota cando as dúas avaliacións
+comparadas consideran que \texttt{IVR} aplica.
+
+{\rowcolors{2}{white}{udcgray!25}
+\begin{table}[htbp]
+    \centering
+    \scriptsize
+    \setlength{\tabcolsep}{3pt}
+    \begin{tabular}{p{0.25\textwidth}|p{0.08\textwidth}|p{0.08\textwidth}|p{0.10\textwidth}|p{0.11\textwidth}|p{0.11\textwidth}}
+        \rowcolor{udcpink!25}
+        \textbf{Comparación} & \textbf{\texttt{HPI} MAE} & \textbf{\texttt{HPI} $\pm 1$} &  \textbf{\texttt{IVR} F1 aplic.} & \textbf{\texttt{IVR} MAE cond.} & \textbf{\texttt{IVR} $\pm 1$ cond.} \\\hline
+        Sara -- Nerea & 0.190 & 0.995  & 0.965 & 0.500 & 0.912 \\
+        Orixinal -- Sara & 0.465 & 0.945  & 0.918 & 1.593 & 0.619 \\
+        Orixinal -- Nerea & 0.525 & 0.945  & 0.879 & 1.888 & 0.560 \\
+    \end{tabular}
+    \caption{Variabilidade entre as dúas investigadoras e respecto da etiqueta orixinal. A métrica de \texttt{IVR} condicional calcúlase só cando as dúas avaliacións comparadas asignan unha nota positiva de \texttt{IVR}.}
+    \label{tab:peer-review-expertas}
+\end{table}
+}
+
+Os resultados da Táboa~\ref{tab:peer-review-expertas} mostran un acordo moi alto entre Sara e
+Nerea. En \texttt{HPI}, o erro medio entre ambas foi de só 0.190 puntos e practicamente todas as
+mostras quedaron dentro de $\pm 1$ punto. En \texttt{IVR} tamén se observou un acordo elevado na
+aplicabilidade, cun F1 de 0.965, e unha diferenza media de 0.500 puntos nos casos nos que ambas
+asignaron unha nota positiva.
+
+Porén, a comparación de cada investigadora coa etiqueta orixinal presenta unha variabilidade maior.
+En \texttt{HPI}, o erro medio fronte ao dato orixinal sitúase entre 0.465 e 0.525 puntos. En
+\texttt{IVR}, a diferenza é máis acusada: o \textit{MAE} condicional fronte ao orixinal sobe ata
+1.593 no caso de Sara e 1.888 no caso de Nerea. 
+
+Pódese interpretar estos datos como que a avaliación experta actual, aínda que teña un erro maior en \textit{IVR} que 
+en \textit{HPI}, é máis consistente entre expertas que o histórico que se usou para adestrar o sistema. Isto podería
+explicar inconsistencias posteriores entre a inferencia do sistema e as expertas.
+
+\subsubsection{Sistema fronte ao dato orixinal}
+A segunda análise comparou directamente a predición do sistema coa etiqueta orixinal do subconxunto
+de 200 imaxes. Esta comparación permite comprobar se o comportamento observado na proba práctica é
+coherente cos resultados obtidos previamente no conxunto de test.
+
+{\rowcolors{2}{white}{udcgray!25}
+\begin{table}[htbp]
+    \centering
+    \scriptsize
+    \setlength{\tabcolsep}{4pt}
+    \begin{tabular}{p{0.40\textwidth}|p{0.18\textwidth}|p{0.18\textwidth}}
+        \rowcolor{udcpink!25}
+        \textbf{Métrica} & \textbf{Test final} & \textbf{Proba expertos} \\\hline
+        \texttt{HPI} MAE & 0.5768 & 0.3600 \\
+        \textit{Recall} aplicabilidade \texttt{IVR} & 0.8243 & 0.8824 \\
+        \texttt{IVR} MAE condicional & 1.3907 & 1.0286 \\
+        \textit{Within 1} condicional de \texttt{IVR} & 0.7022 & 0.7143 \\
+    \end{tabular}
+    \caption{Comparación entre as métricas obtidas no test final e as obtidas polo sistema fronte á etiqueta orixinal no subconxunto revisado polos expertos.}
+    \label{tab:peer-review-sistema-orixinal}
+\end{table}
+}
+
+Como se observa na Táboa~\ref{tab:peer-review-sistema-orixinal}, o sistema obtivo na proba de
+expertos resultados iguais ou mellores ca os rexistrados no test final. O \textit{MAE} de
+\texttt{HPI} baixou de 0.5768 a 0.3600 e a exactitude subiu ata 0.7400. En \texttt{IVR}, a mellora
+tamén aparece de forma consistente. A
+aplicabilidade acada un \textit{recall} de 0.8824 e a nota condicional presenta un \textit{MAE}
+de 1.0286.
+
+Esta lectura debe facerse con cautela, xa que o subconxunto de validación con expertos non foi
+extraído mediante mostraxe aleatoria simple, senón mediante unha selección estratificada para cubrir
+toda a escala de \texttt{HPI} e diferentes niveis positivos de \texttt{IVR}. Aínda así, o resultado
+é positivo porque, nun conxunto deseñado precisamente para conter diversidade de casos, o sistema
+mantén un comportamento coherente e mesmo lixeiramente mellor.
+
+\subsubsection{Sistema fronte ás investigadoras}
+A terceira comparación avaliou se o sistema se comporta como un avaliador adicional fronte ás dúas
+investigadoras. Para iso comparouse o resultado sistema--experta co resultado Sara--Nerea.
+
+{\rowcolors{2}{white}{udcgray!25}
+\begin{table}[htbp]
+    \centering
+    \scriptsize
+    \setlength{\tabcolsep}{3pt}
+    \begin{tabular}{p{0.23\textwidth}|p{0.08\textwidth}|p{0.08\textwidth}|p{0.10\textwidth}|p{0.11\textwidth}|p{0.11\textwidth}}
+        \rowcolor{udcpink!25}
+        \textbf{Comparación} & \textbf{\texttt{HPI} MAE} & \textbf{\texttt{HPI} $\pm 1$} & \textbf{\texttt{IVR} F1 aplic.} & \textbf{\texttt{IVR} MAE cond.} & \textbf{\texttt{IVR} $\pm 1$ cond.} \\\hline
+        Sara -- Nerea & 0.190 & 0.995 & 0.965 & 0.500 & 0.912 \\
+        Sara -- Sistema & 0.635 & 0.910  & 0.872 & 2.027 & 0.545 \\
+        Nerea -- Sistema & 0.615 & 0.910  & 0.860 & 2.263 & 0.456 \\
+    \end{tabular}
+    \caption{Comparación do sistema coas dúas investigadoras fronte á variabilidade observada entre elas.}
+    \label{tab:peer-review-sistema-expertas}
+\end{table}
+}
+
+A Táboa~\ref{tab:peer-review-sistema-expertas} mostra unha diferenza clara entre \texttt{HPI} e
+\texttt{IVR}. En \texttt{HPI}, o sistema queda máis afastado das investigadoras do que elas quedan
+entre si, pero segue mantendo unha proximidade razoable debido a que nos dous casos máis do 91\% das mostras
+quedan dentro de $\pm 1$ punto. Isto indica que, para a variable principal de intensidade de
+herbivoría, o sistema produce valoracións próximas ás humanas aínda que non alcanza o nivel de
+acordo entre expertas.
+
+En \texttt{IVR}, pola contra, a diferenza sistema--experta é máis alta. A aplicabilidade segue
+presentando valores de F1 aceptables, entre 0.860 e 0.872, pero a nota condicional acada erros medios
+de 2.027 e 2.263 puntos, claramente superiores ao 0.500 observado entre Sara e Nerea. Este resultado
+matiza que o sistema pode aproximarse ben á etiqueta orixinal e manter unha
+estrutura coherente coas regras expertas, pero a súa saída de \texttt{IVR} non reproduce con tanta
+precisión o criterio compartido polas dúas investigadoras nesta revisión manual.
+
+Unha interpretación plausible é que a etiqueta orixinal do \textit{dataset} e as novas revisións non
+representan exactamente o mesmo punto de referencia. De feito, na Táboa~\ref{tab:peer-review-expertas}
+xa se observa que as investigadoras se afastan máis da etiqueta orixinal en \texttt{IVR} ca entre
+elas. Polo tanto, cando o sistema se compara coas investigadoras, parte do desacordo pode proceder
+de que foi adestrado para reproducir a etiqueta orixinal, non unha nova etiqueta consensuada xerada
+a posteriori.
+
+\subsubsection{Análise das mostras marcadas para revisión}
+Por último, avaliouse se os perfís de revisión manual sinalaban imaxes nas que realmente existía
+maior incerteza. Para isto analizouse a variabilidade
+entre a etiqueta orixinal, Sara e Nerea dentro dos subconxuntos marcados.
+
+{\rowcolors{2}{white}{udcgray!25}
+\begin{table}[htbp]
+    \centering
+    \scriptsize
+    \setlength{\tabcolsep}{3pt}
+    \begin{tabular}{p{0.32\textwidth}|p{0.07\textwidth}|p{0.16\textwidth}|p{0.16\textwidth}|p{0.16\textwidth}}
+        \rowcolor{udcpink!25}
+        \textbf{Subconxunto} & \textbf{n} & \textbf{\texttt{HPI} MAE pares} & \textbf{\texttt{IVR} MAE pares} & \textbf{\texttt{IVR} desac. aplic.} \\\hline
+        Todas as mostras & 200 & 0.393 & 1.443 & 0.160 \\
+        Marcadas para revisión en \texttt{solo\_dudoso} & 3 & 0.222 & 1.286 & 0.333 \\
+        Seguras en \texttt{solo\_dudoso} & 197 & 0.396 & 1.445 & 0.157 \\
+        Marcadas para revisión en \texttt{conservador} & 15 & 0.578 & 2.163 & 0.400 \\
+        Seguras en \texttt{conservador} & 185 & 0.378 & 1.387 & 0.141 \\
+    \end{tabular}
+    \caption{Variabilidade entre etiqueta orixinal, Sara e Nerea nos subconxuntos sinalados polos perfís de revisión. O \texttt{MAE} por pares calcula a diferenza media entre todos os pares dispoñibles no subconxunto, mentres que o desacordo de aplicabilidade de \texttt{IVR} mide diferenzas entre \texttt{IVR=0} e \texttt{IVR>0}.}
+    \label{tab:peer-review-flags}
+\end{table}
+}
+
+Os resultados da Táboa~\ref{tab:peer-review-flags} apoian a utilidade do perfil conservador. As 15
+mostras que este perfil marca para revisión presentan máis variabilidade ca o conxunto completo:
+o \texttt{HPI} \textit{MAE} por pares sobe de 0.393 a 0.578, o \texttt{IVR} \textit{MAE} por pares aumenta de 1.443 a
+2.163.
+
+O perfil \texttt{solo\_dudoso}, pola contra, é demasiado restritivo para extraer conclusións
+estatísticas robustas nesta proba, xa que só sinala 3 imaxes. Ademais, esas tres mostras non
+presentan maior variabilidade ordinal en \texttt{HPI} nin en \texttt{IVR} ca o conxunto completo;
+o sinal que si aparece é un desacordo de aplicabilidade de \texttt{IVR} superior ao global. En
+conxunto, esta análise suxire que o mecanismo de revisión manual é útil especialmente na
+configuración conservadora, xa que tende a seleccionar imaxes nas que tamén existe maior
+variabilidade entre avaliacións humanas.
+
+\subsubsection{Conclusión da validación}
+Tomando a proba no seu conxunto, os resultados apoian parcialmente a hipótese de que o sistema pode
+actuar como unha ferramenta de apoio comparable a unha avaliación experta. Fronte
+á etiqueta orixinal, o sistema obtén resultados moi competitivos e mesmo mellores ca os observados
+no test final, mantendo ademais a consistencia estrutural entre \texttt{HPI} e \texttt{IVR}. Isto
+indica que a solución desenvolvida xeneraliza correctamente ao subconxunto revisado e reproduce de
+forma razoable o criterio co que foi adestrada.
+
+Con todo, a comparación directa coas dúas investigadoras mostra que o sistema aínda non alcanza o
+nivel de acordo existente entre expertas, sobre todo na nota condicional de \texttt{IVR}. A lectura
+máis axeitada non é, polo tanto, que o sistema substitúa plenamente unha revisión experta, senón que
+pode automatizar unha parte importante do proceso e proporcionar puntuacións coherentes, reservando
+para revisión humana os casos máis incertos. A análise dos perfís de revisión reforza esta
+interpretación: o modo conservador marca un subconxunto pequeno de imaxes que efectivamente presenta
+maior variabilidade entre a etiqueta orixinal e as avaliacións das investigadoras.
+
+
+
 \section{Conclusións do traballo}
+Nesta sección recóllense as conclusións xerais do traballo a partir dos obxectivos formulados ao
+comezo da memoria e da validación realizada co equipo experto.
+
+Como se indicou na introdución, o traballo xurdiu a partir dunha necesidade do grupo BIOCOST da
+Facultade de Ciencias da UDC. Este equipo dispoñía dun historial amplo de algas xa analizadas e
+precisaba unha ferramenta capaz de axudar ás persoas expertas a estimar o nivel de dano e a posible
+orixe da depredación por herbivoría.
+
 \subsection{Cumprimento dos obxectivos}
-\subsection{Aportacións principais}
+Coas probas descritas na Sección~\ref{validacion-con-expertos}, pódese concluír que se acadaron os
+obxectivos principais do traballo. Analizouse e preparouse o conxunto de datos, deseñouse unha etapa
+de detección e normalización das imaxes, desenvolveuse unha CNN para estimar \texttt{HPI} e
+\texttt{IVR}, integrouse o fluxo completo nunha ferramenta executable e avaliouse o seu
+comportamento con datos reais e cunha revisión externa por parte de expertas.
+
+Os resultados non demostran que o sistema poida substituír a avaliación experta, nin ese era o
+obxectivo do proxecto. O que si mostran é que pode automatizar unha parte relevante do proceso:
+proporciona estimacións coherentes nos casos máis claros e identifica mostras que convén revisar
+manualmente cando a decisión é máis incerta. Neses casos, a saída do sistema pode servir
+como valoración orientativa para apoiar o traballo experto.
+
+Na reunión co equipo de BIOCOST, as investigadoras valoraron positivamente os resultados obtidos e
+consideraron coherente o aumento do erro en \textit{IVR}, especialmente polo efecto de arrastre que
+pode producir unha predición incorrecta de \textit{HPI}. Ademais, indicaron que a ferramenta podería
+poñerse en práctica no seu fluxo de traballo, o que reforza a utilidade aplicada da solución
+desenvolvida.
 
 \section{Limitacións do sistema}
+Malia os resultados obtidos, o sistema presenta varias limitacións que deben terse en conta para
+interpretar correctamente o seu alcance.
+
+\subsection{Erro en IVR}
+O principal problema da solución desenvolvida é o erro asociado á inferencia de \textit{IVR}. Como se
+analizou ao longo da memoria, unha parte deste erro procede do arrastre de \textit{HPI}. Se o sistema
+predí unha clase de \textit{HPI} na que \textit{IVR} non debería aplicarse, a saída final de
+\textit{IVR} tamén queda afectada. Con todo, a validación coas investigadoras mostrou que o erro do
+sistema en \textit{IVR} segue sendo claramente superior ao observado entre expertas, como
+se recolle na Táboa~\ref{tab:peer-review-sistema-expertas}.
+
+Esta dificultade pode deberse á propia natureza da variable, que require distinguir a procedencia das
+marcas de herbivoría e non só a intensidade do dano, pero tamén á variabilidade das etiquetas
+históricas empregadas para o adestramento.
+
+\subsection{Erro en HPI}
+Aínda que con menor severidade ca en \textit{IVR}, o sistema tamén presenta máis variabilidade en
+\textit{HPI} ca a observada entre as dúas expertas durante a revisión manual. Este comportamento pode
+estar relacionado coa variabilidade das propias etiquetas do \textit{dataset}, xeradas ao longo dun
+período amplo e baixo criterios que foron refinándose co tempo.
+
+\subsection{Adestramento orientado a lóxica experta}
+Como se puido ver durante o desenvolvemento da CNN, a lóxica experta de aplicabilidade de
+\textit{IVR} incorporouse nas últimas iteracións do traballo. Dado que o obxectivo era reproducir o
+criterio empregado polos especialistas, tería sido preferible integrar esta lóxica desde as primeiras
+probas e definir desde o inicio métricas aliñadas coa interpretación biolóxica do problema.
+
+En particular, a métrica global \texttt{mae\_ivr} resultou útil para comparar experimentos iniciais,
+pero non representaba axeitadamente a realidade condicional de \textit{IVR}, xa que mesturaba nun só
+valor os erros de aplicabilidade e os erros na nota cando a variable si tiña sentido.
+
+\subsection{Limitacións do conxunto de datos e do preprocesado}
+O traballo tamén estivo condicionado pola calidade e a heteroxeneidade do material inicial. As imaxes
+presentaban diferenzas de iluminación, fondo, orientación, escala e presenza de elementos auxiliares,
+o que obrigou a introducir unha etapa de detección con YOLO e unha normalización posterior. Aínda que
+esta estratexia funcionou de maneira suficiente para o sistema final, algunhas imaxes quedaron sen
+detección ou tiveron que descartarse tras a revisión manual dos recortes.
+
+Ademais, a limpeza inicial do ficheiro tabular non eliminaba automaticamente as filas sen imaxe
+asociada, senón principalmente as imaxes sen referencia válida nas etiquetas. Isto non tivo un impacto
+práctico nas execucións finais, porque as etapas posteriores filtraban as mostras dispoñibles, pero é
+un aspecto mellorable desde o punto de vista da consistencia do pipeline.
 
 \section{Liñas futuras}
+Finalmente, recóllense varias liñas de traballo que poderían mellorar a precisión do sistema e a súa
+utilidade no contexto real de uso.
+
+\subsection{Readestramento con datos novos}
+Como se observa na Táboa~\ref{tab:peer-review-expertas}, as anotacións das dúas expertas presentan
+moita menos variabilidade entre si ca fronte ás etiquetas orixinais empregadas para adestrar o
+sistema. Isto suxire que o \textit{dataset} histórico, construído ao longo de varios anos, podería
+incluír avaliacións realizadas baixo criterios non completamente homoxéneos ou anteriores ao grao de
+madurez actual da métrica experta.
+
+Unha liña futura clara sería reavaliar, total ou parcialmente, o conxunto de imaxes con criterios
+actualizados e consensuados. Aínda que esta tarefa sería custosa, permitiría adestrar o modelo cun
+obxectivo máis próximo ao criterio experto actual e podería reducir especialmente o erro observado en
+\textit{IVR}.
+
+\subsection{Estandarización de toma de fotografías}
+Outra mellora relevante sería estandarizar a toma de fotografías. Empregar unha distancia de captura,
+un fondo, unha iluminación e unha posición da mostra máis controladas reduciría a variabilidade allea
+ao fenómeno biolóxico estudado. Isto facilitaría a detección da alga por parte de YOLO e permitiría
+que a CNN se centrase mellor nos trazos relacionados co dano e coa súa procedencia, en lugar de
+aprender posibles patróns asociados ao ruído introducido polas condicións de captura.
+
+\subsection{Mellora da ferramenta de revisión}
+Unha continuación natural do sistema sería desenvolver unha interface máis completa para a revisión
+manual das mostras marcadas como incertas. A ferramenta actual xa xera ficheiros CSV diferenciando
+predicións seguras e mostras revisables, pero unha interface visual permitiría validar ou corrixir
+esas predicións de maneira máis cómoda e almacenar novas etiquetas revisadas para futuros
+readestramentos.
