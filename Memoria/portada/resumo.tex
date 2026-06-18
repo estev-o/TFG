@@ -7,7 +7,7 @@ Historicamente, a bioloxía mariña dependeu da inspección visual de expertos p
 dos ecosistemas. No caso das algas laminarias (Laminaria hyperborea), a análise de depredación por
 peixes e invertebrados realízase mediante a asignación manual de notas nunha escala numérica de
 enteiros, un proceso subxectivo e custoso en tempo ante o crecente volume de datos visuais
-dispoñibles. Concretamente neste caso, non existe estudos previos que traten
+dispoñibles. Concretamente neste caso, non existen estudos previos que traten
 específicamente este tipo de alga. Ademáis, existe un problema de preprocesado e normalización
 que solucionar nas imaxes, debido a que se tomaron de unha forma non estandarizada.Este proxecto
 aborda a automatización de citado proceso mediante un pipeline de dúas etapas de aprendizaxe
@@ -15,14 +15,13 @@ profundo. Utilízase un dataset de 4.984 imaxes proporcionado pola Facultade de 
 adestrar, en primeira instancia, un modelo YOLO encargado da detección e localización das algas nas
 imaxes. Posteriormente, implementase unha arquitectura de regresión ordinal (CORAL-CNN) para
 clasificar o nivel de dano. A diferenza da clasificación tradicional, este enfoque preserva a orde lóxica
-da etiquetación por dano incremental, permitindo que o sistema funcione como unha ferramenta
-robusta de soporte á decisión para os expertos, reducindo a subxectividade e optimizando o fluxo de
+da etiquetación por dano incremental, permitindo que o sistema funcione como unha ferramenta de soporte á decisión para os expertos, reducindo a subxectividade e optimizando o fluxo de
 traballo científico
 
   \vspace*{25pt}
   \begin{segundoresumo}
   
-Historically, marine biology has relied on expert visual inspection to assess ecosystem health. In the case of kelp (Laminaria hyperborea), the analysis of predation by fish and invertebrates is performed through the manual assignment of scores on an integer numerical scale, a subjective and time-consuming process given the growing volume of available visual data. Specifically in this case, there are no previous studies that specifically address this type of algae. Furthermore, there is an image preprocessing and normalization problem to resolve, as they were captured in a non-standardized manner. This project addresses the automation of the aforementioned process through a two-stage deep learning pipeline. A dataset of 4,984 images provided by the Faculty of Sciences is used to train, in the first instance, a YOLO model tasked with the detection and localization of the algae within the images. Subsequently, an ordinal regression architecture (CORAL-CNN) is implemented to classify the level of damage. Unlike traditional classification, this approach preserves the logical order of incremental damage labeling, allowing the system to function as a robust decision-support tool for experts, reducing subjectivity, and optimizing the scientific workflow.
+Historically, marine biology has relied on expert visual inspection to assess ecosystem health. In the case of kelp (Laminaria hyperborea), the analysis of predation by fish and invertebrates is performed through the manual assignment of scores on an integer numerical scale, a subjective and time-consuming process given the growing volume of available visual data. Specifically in this case, there are no previous studies that specifically address this type of algae. Furthermore, there is an image preprocessing and normalization problem to resolve, as they were captured in a non-standardized manner. This project addresses the automation of the aforementioned process through a two-stage deep learning pipeline. A dataset of 4,984 images provided by the Faculty of Sciences is used to train, in the first instance, a YOLO model tasked with the detection and localization of the algae within the images. Subsequently, an ordinal regression architecture (CORAL-CNN) is implemented to classify the level of damage. Unlike traditional classification, this approach preserves the logical order of incremental damage labeling, allowing the system to function as a decision-support tool for experts, reducing subjectivity, and optimizing the scientific workflow.
 
 
   \end{segundoresumo}

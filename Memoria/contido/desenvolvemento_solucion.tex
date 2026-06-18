@@ -72,7 +72,7 @@ quedou composto por 4972 imaxes e 5486 rexistros tabulares.
 
 \subsection{Primeira Aproximación}
 Inicialmente procurouse unha solución baseada en técnicas clásicas de visión por computador
-empregando a libraría \texttt{OpenCV} para Python en dous script novos, 
+empregando a libraría \texttt{OpenCV} para Python en dous script novos, \\
 \texttt{02\_recortar\_algas.py} e \texttt{02\_debug\_recortar\_algas.py}. O obxectivo era resolver a detección da alga cun
 enfoque relativamente simple e lixeiro, evitando nun primeiro momento o uso de modelos de
 aprendizaxe profunda. As distintas implementacións probadas compartían unha mesma idea central:
@@ -218,7 +218,7 @@ entre ambos os dous subconxuntos realizábase de maneira aleatoria segundo a pro
         \includegraphics[width=\linewidth]{imaxes/gui_recorte_erroneo.png}
         \caption{Interface do script cun recorte erróneo, rechazaríase manualmente.}
     \end{subfigure}
-    \caption{Exemplos da interface para decidir se usar ou non o recorte automático no dataset.}
+    \caption{Exemplos da interface para decidir se usar ou non o recorte automático no \textit{dataset}.}
     \label{fig:gui-recortes-manuais}
 \end{figure}
 
@@ -492,7 +492,7 @@ prematura de resolución nesta fase, aínda que a entrada final da CNN sexa infe
 de hardware. Na segunda pasada, xéranse xa os recortes normalizados e colócanse efectivamente sobre
 o lenzo negro correspondente.
 
-Para a execución, primeiro empregouse a flag debug para comprobar que a execución funcionaba. Unha vez
+Para a execución, primeiro empregouse a flag \texttt{debug} para comprobar que a execución funcionaba. Unha vez
 se comprobou a correcta execución, normalizouse o \textit{dataset} enteiro. A resolución das imaxes
 resultantes foi 4496x4496 píxeles. Ademais, atopáronse 5 imaxes sen referencia no CSV (esta
 comprobación debera terse feito na anteriormente, no preprocesado). Con isto, finalmente obtívose un
@@ -744,9 +744,9 @@ Despóis dunha primeira proba \textit{smoke}, para comprobar o correcto adestram
 pasouse a elixir entre 3 \textit{backbones}:
 
 \begin{itemize}
-    \item \textit{EfficientNet-B0}: Un modelo ultraeficiente que equilibra profundidade, ancho e resolución mediante \textit{compound scaling} para maximizar a precisión co menor custo computacional posible.
-    \item \textit{ResNet18}: Unha arquitectura clásica que introduce conexións residuais para evitar o deterioro do gradiente, permitindo un adestramento rápido, estable e eficaz.
-    \item \textit{ConvNeXt\_tiny}: Unha CNN moderna que redeseña as convolucións tradicionais inspirándose nos \textit{Vision Transformers} para ofrecer unha alta precisión e un rendemento competitivo nun formato compacto.
+    \item \textit{EfficientNet-B0}~\cite{DBLP:journals/corr/abs-1905-11946}: Un modelo ultraeficiente que equilibra profundidade, ancho e resolución mediante \textit{compound scaling} para maximizar a precisión co menor custo computacional posible.
+    \item \textit{ResNet18}~\cite{DBLP:journals/corr/HeZRS15}: Unha arquitectura clásica que introduce conexións residuais para evitar o deterioro do gradiente, permitindo un adestramento rápido, estable e eficaz.
+    \item \textit{ConvNeXt\_tiny}~\cite{DBLP:journals/corr/abs-2201-03545}: Unha CNN moderna que redeseña as convolucións tradicionais inspirándose nos \textit{Vision Transformers} para ofrecer unha alta precisión e un rendemento competitivo nun formato compacto.
 \end{itemize}
 
 Os tres adestramentos realizáronse baixo a mesma configuración experimental, modificando unicamente

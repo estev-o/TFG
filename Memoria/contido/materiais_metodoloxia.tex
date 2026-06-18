@@ -50,7 +50,7 @@ que se atoparon ficheiros en formatos .JPG, .JPEG, .PNG e .HEIC.
 
 O \textit{dataset} utilízase como base para o adestramento dos modelos que formarán parte do
 \textit{pipeline} final. En particular, emprégase para adestrar un modelo YOLO orientado á detección
-das algas en novas imaxes capturadas polos expertos. Así mesmo, o conxunto de datos serve para
+das algas en imaxes capturadas polos expertos. Así mesmo, o conxunto de datos serve para
 probar a normalización das imaxes antes do seu procesado pola CNN e, finalmente, para adestrar a
 propia CNN encargada de realizar a inferencia sobre as imaxes de entrada. Para este fin, o tamaño do
 \textit{dataset}, malia a súa variabilidade, resulta axeitado para as necesidades do sistema
@@ -103,35 +103,6 @@ preparación dos datos, cuestión que se describe con máis detalle na seguinte 
 
     \rowcolor{udcpink!25}
     \multicolumn{3}{c}{\textbf{Medidas biométricas e morfolóxicas}} \\\hline
-    \textit{TW (g)} & Medida biométrica & Peso total da mostra. \\
-    \textit{LWE (g)} & Medida biométrica & Medida de peso específica rexistrada polos expertos. \\
-    \textit{SWE (g)} & Medida biométrica & Medida de peso específica rexistrada polos expertos. \\
-    \textit{HWE (g)} & Medida biométrica & Medida de peso específica rexistrada polos expertos. \\
-    \textit{HBL (cm)} & Medida morfolóxica & Lonxitude rexistrada da alga. \\
-    \textit{HW (cm)} & Medida morfolóxica & Anchura rexistrada da alga. \\
-    \textit{HH (cm)} & Medida morfolóxica & Altura rexistrada da alga. \\
-    \textit{SD1 (mm)} & Medida morfolóxica & Distancia ou diámetro específico anotado no CSV. \\
-    \textit{SD2 (mm)} & Medida morfolóxica & Distancia ou diámetro específico anotado no CSV. \\
-    \textit{LT (mm)} & Medida morfolóxica & Medida lineal rexistrada polos expertos. \\
-    \textit{RAM (nº)} & Conteo morfolóxico & Número de ramificacións ou estruturas asociadas. \\
-    \textit{Age} & Característica biolóxica & Idade rexistrada da mostra. \\
-    \textit{TL (cm)} & Medida morfolóxica & Medida lineal rexistrada polos expertos. \\
-    \textit{LL (cm)} & Medida morfolóxica & Medida lineal rexistrada polos expertos. \\
-    \textit{SL (cm)} & Medida morfolóxica & Medida lineal rexistrada polos expertos. \\
-    \textit{LW (cm)} & Medida morfolóxica & Medida lineal rexistrada polos expertos. \\
-    \textit{LA (cm2)} & Medida superficial & Área rexistrada da alga. \\
-    \textit{SA (cm2)} & Medida superficial & Área rexistrada polos expertos. \\
-
-    \rowcolor{udcpink!25}
-    \multicolumn{3}{c}{\textbf{Variables auxiliares de caracterización}} \\\hline
-    \textit{Recluta(0)/No Recluta(1)} & Clasificación binaria & Indica se a mostra foi clasificada como recruta. \\
-    \textit{Soros 1(1)/0(0)} & Clasificación binaria & Presenza ou ausencia de soros. \\
-    \textit{Viability (si/no)} & Estado biolóxico & Campo textual de viabilidade. \\
-    \textit{Viable0\_NoViable1} & Estado biolóxico & Codificación numérica da viabilidade. \\
-    \textit{Grazing marks (si/no)} & Observación de dano & Presenza ou ausencia de marcas de herbivoría. \\
-
-    \rowcolor{udcpink!25}
-    \multicolumn{3}{c}{\textbf{Etiquetas obxectivo empregadas}} \\\hline
     \gls{hpi} & Etiqueta ordinal de dano & Variable empregada para cuantificar o nivel de dano. \\
     \gls{ivr} & Etiqueta asociada á orixe da depredación & Variable empregada para caracterizar o tipo de depredación. \\
 \end{longtable}
@@ -229,33 +200,65 @@ Táboa~\ref{tab:escala-ivr}.
 \end{table}
 }
 
-\section{Metodoloxía do traballo}
-O desenvolvemento deste traballo estruturouse en varias fases sucesivas, co obxectivo de construír
-un sistema capaz de asistir aos expertos na avaliación do dano por herbivoría en algas laminarias a
-partir de imaxes. Esta organización permitiu abordar o problema de maneira progresiva, partindo da
-análise dos datos dispoñibles e avanzando cara á construción dunha solución integrada.
+\section{Enxeñaría de desenvolvemento}
+Desde o punto de vista da enxeñaría de desenvolvemento, o traballo organizouse como un proceso
+iterativo e incremental. Nun primeiro momento dividiuse o problema global nas mesmas grandes fases
+que estruturan esta memoria: análise do dominio e do conxunto de datos, preparación das imaxes,
+detección e recorte das algas, normalización dos recortes, deseño dos modelos de aprendizaxe
+profunda, avaliación experimental e integración final da \textit{pipeline}. Esta división permitiu
+traballar sobre obxectivos máis acoutados e validar cada decisión antes de incorporala ao sistema
+completo.
 
-\begin{enumerate}
-    \item \textbf{Análise inicial do material dispoñible.} Nunha primeira fase revisáronse as
-    imaxes, o ficheiro de etiquetas e a documentación proporcionada polos expertos, co fin de
-    comprender a natureza do problema e identificar as variables máis relevantes para o sistema.
+O desenvolvemento non seguiu unha secuencia estritamente lineal. Aínda que as fases principais se
+presentan de maneira ordenada, en varias ocasións foi necesario volver sobre decisións previas a
+partir dos resultados obtidos. Por exemplo, a primeira análise dos recortes xerados automaticamente
+serviu para detectar erros de segmentación e motivou unha etapa posterior de revisión e curación dos
+datos. Do mesmo xeito, os resultados iniciais da \gls{cnn} levaron a reformular a saída do modelo,
+comparar diferentes arquitecturas e introducir a lóxica experta asociada á aplicabilidade de
+\gls{ivr}. Polo tanto, cada bloque do sistema foi refinándose mediante ciclos de implementación,
+avaliación e corrección.
 
-    \item \textbf{Selección das variables obxectivo.} A partir desta análise seleccionáronse as
-    variables \gls{hpi} e \gls{ivr}, por seren as máis adecuadas para representar, respectivamente,
-    o nivel de dano observado e a posible procedencia da depredación.
+As primeiras semanas dedicáronse á comprensión do problema biolóxico, á revisión das variables
+incluídas no \textit{dataset} e á identificación das dificultades presentes nas imaxes reais. A
+partir desta análise abordouse a preparación dos datos: primeiro mediante unha limpeza inicial e,
+posteriormente, mediante a detección automática da rexión ocupada pola alga con YOLO. Esta etapa
+permitiu separar o problema de localización do problema de estimación do dano, reducindo a
+variabilidade visual que tería que asumir directamente a rede de clasificación.
 
-    \item \textbf{Preparación dos datos.} Nunha terceira fase abordouse a organización e preparación
-    do conxunto de datos, prestando especial atención á variabilidade das imaxes e á necesidade de
-    establecer un conxunto de entrada consistente para o desenvolvemento posterior do sistema.
+Unha vez obtidos os recortes, o esforzo centrouse na súa normalización e revisión. Esta fase foi
+especialmente relevante porque o conxunto de datos non procedía dun protocolo de captura
+completamente controlado, polo que existían diferenzas de iluminación, escala, orientación e fondo.
+Tras dispoñer dun conxunto de entrada máis homoxéneo, desenvolvéronse as primeiras versións da
+\gls{cnn}, preparáronse os particionamentos de adestramento, validación e proba, e comparáronse
+distintas formulacións do problema.
 
-    \item \textbf{Deseño da estratexia de procesado.} Posteriormente formulouse unha estratexia de
-    análise dividida en varias etapas complementarias: localización da alga na imaxe, preparación da
-    rexión de interese e estimación das variables obxectivo a partir da información visual.
+Na parte final do traballo, o desenvolvemento concentrouse na mellora da estimación de \gls{hpi} e
+\gls{ivr}, na análise dos erros máis frecuentes e na integración da solución nunha \textit{pipeline}
+de inferencia usable. Finalmente, realizouse unha validación con expertas sobre un subconxunto de
+imaxes, o que permitiu contrastar o comportamento do sistema co criterio humano e contextualizar as
+limitacións observadas.
 
-    \item \textbf{Integración da solución final.} Finalmente, os distintos compoñentes desenvolvidos
-    integráronse nun fluxo de traballo unificado orientado ao seu uso como ferramenta de apoio á
-    decisión por parte dos expertos.
-\end{enumerate}
+Na Figura~\ref{fig:diagrama-desenvolvemento-solucion} represéntase de forma resumida o fluxo seguido
+durante o desenvolvemento da solución. O diagrama inclúe tanto as fases que forman parte da versión
+final coma algunhas alternativas probadas e descartadas durante a evolución do sistema.
 
-Os detalles técnicos asociados a cada unha destas fases descríbense no capítulo seguinte, dedicado ao
-desenvolvemento da solución proposta.
+\clearpage
+\begin{figure}[p]
+    \centering
+    \includegraphics[height=0.90\textheight,keepaspectratio]{imaxes/diagrama_desenvolvemento_solucion.pdf}
+    \caption{Diagrama xeral do proceso de desenvolvemento da solución.}
+    \label{fig:diagrama-desenvolvemento-solucion}
+\end{figure}
+\clearpage
+
+\begin{figure}[htbp]
+    \centering
+    \includegraphics[width=\textwidth]{imaxes/cronograma_gantt.pdf}
+    \caption{Cronograma aproximado das principais fases de desenvolvemento do traballo.}
+    \label{fig:cronograma-gantt}
+\end{figure}
+
+Na Figura~\ref{fig:cronograma-gantt} móstrase a planificación temporal aproximada seguida durante o
+proxecto. O solapamento entre varias tarefas reflicte precisamente o carácter iterativo do proceso:
+mentres unha fase se pechaba, os resultados obtidos condicionaban axustes nas fases anteriores ou
+servían de entrada para a seguinte iteración.
