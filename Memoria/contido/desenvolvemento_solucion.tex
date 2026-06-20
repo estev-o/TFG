@@ -1307,7 +1307,7 @@ mantén a lóxica experta estrita, aproveita mellor a información de \texttt{HP
 media da nota de \texttt{IVR}.
 
 
-\section{Integración da pipeline}
+\section{Integración e funcionamento da \textit{pipeline}}
 Unha vez seleccionadas as versións finais do detector YOLO e da CNN, desenvolveuse un último
 \textit{script}, denominado \texttt{script\_inferencia.py}, co obxectivo de integrar todas as
 etapas anteriores nun único fluxo de traballo executable. A finalidade deste programa era
@@ -1323,7 +1323,7 @@ máis dun candidato, permítese seleccionar interactivamente cal debe empregarse
 
 Despois desta comprobación inicial, o programa solicita a ruta do directorio coas imaxes que se
 queren analizar. Tamén permite escoller de forma interactiva o criterio de revisión manual entre
-conservador e estrito. Esta decisión introduciuse para que os expertos poidan distinguir entre as
+\texttt{solo\_dudoso} e \texttt{conservador}. Esta decisión introduciuse para que os expertos poidan distinguir entre as
 inferencias seguras e as que requiren revisión humana segundo a confianza da CNN. Os casos que se
 revisan son aqueles nos que \texttt{HPI} está preto das fronteiras \texttt{0/1} ou \texttt{4/5},
 dado que estas fronteiras son as que crean os erros de aplicabilidade que se pretenden reducir. A
@@ -1337,8 +1337,8 @@ Táboa~\ref{tab:modos-revision-pipeline} resume os umbrais empregados en cada mo
     \begin{tabular}{p{0.18\textwidth}|p{0.16\textwidth}|p{0.20\textwidth}|p{0.34\textwidth}}
         \rowcolor{udcpink!25}
         \textbf{Modo} & \textbf{Marxe HPI} & \textbf{Rango de revisión} & \textbf{Interpretación} \\\hline
-        Conservador & 0.15 & 0.35--0.65 & Marca máis casos preto das fronteiras \texttt{0/1} e \texttt{4/5}. \\
-        Estrito & 0.05 & 0.45--0.55 & Marca unicamente os casos moi próximos ao cambio de decisión. \\
+        \texttt{solo\_dudoso} & 0.05 & 0.45--0.55 & Marca unicamente os casos moi próximos ao cambio de decisión. \\
+        \texttt{conservador} & 0.15 & 0.35--0.65 & Marca máis casos preto das fronteiras \texttt{0/1} e \texttt{4/5}. \\
     \end{tabular}
     \caption{Criterios de revisión manual segundo a distancia ás fronteiras críticas de \texttt{HPI}.}
     \label{tab:modos-revision-pipeline}
@@ -1386,6 +1386,38 @@ revisión: identificador da imaxe, predición de \texttt{HPI}, predición de \te
 a mostra foi marcada. Entre estes motivos inclúense fallos de detección, baixa confianza do detector,
 problemas de normalización ou proximidade ás fronteiras críticas de \texttt{HPI}.
 
+Os motivos polos que a \textit{pipeline} pode marcar unha mostra para revisión manual son variados.
+Como se indicou ao comezo desta sección, o obxectivo principal é sinalar aqueles casos nos que a
+\gls{cnn} pode ser máis propensa a cometer erros, especialmente cando a predición de \texttt{HPI} se
+atopa preto das fronteiras críticas que condicionan a aplicabilidade de \texttt{IVR}.
+
+Ademais, o sistema tamén marca para revisión as imaxes nas que se produce algún erro durante a
+execución da \textit{pipeline}. Nestes casos, o motivo non está relacionado coa incerteza da rede, senón
+cun problema detectado nalgunha das etapas anteriores, como a lectura da imaxe, a detección da alga ou
+a normalización do recorte. Deste xeito, os expertos poden identificar por que unha mostra non foi
+procesada correctamente e realizar a avaliación do dano de maneira manual. A explicación de todos os 
+motivos polos que se pode activar o \textit{flag} de revisión atópanse na Figura~\ref{tab:motivos-revision-pipeline}
+
+\begin{table}[htbp]
+    \centering
+    \scriptsize
+    \setlength{\tabcolsep}{3pt}
+    \begin{tabular}{p{0.28\textwidth}|p{0.55\textwidth}}
+        \rowcolor{udcpink!25}
+        \textbf{Motivo de revisión} & \textbf{Interpretación} \\\hline
+        \texttt{hpi\_boundary\_0\_1} & A predición de \texttt{HPI} está preto da fronteira entre ausencia de dano e dano leve. \\
+        \texttt{hpi\_boundary\_4\_5} & A predición de \texttt{HPI} está preto da fronteira entre dano na lámina e perda da lámina. \\
+        Sen detección & YOLO non detectou ningunha alga na imaxe. \\
+        Caixa inválida & A rexión detectada non permite obter un recorte válido. \\
+        Baixa confianza YOLO & A detección existe, pero a confianza do detector é insuficiente. \\
+        Erro de normalización & Non foi posible xerar unha máscara válida ou unha entrada adecuada para a CNN. \\
+        Erro de lectura & A imaxe non puido ser aberta ou procesada correctamente. \\
+    \end{tabular}
+    \caption{Motivos polos que unha mostra pode ser marcada para revisión manual pola \textit{pipeline}.}
+    \label{tab:motivos-revision-pipeline}
+\end{table}
+
+
 Na Táboa~\ref{tab:exemplo-csv-pipeline} móstrase un exemplo simplificado do formato destes CSV. As
 dúas primeiras mostras non precisan revisión, mentres que as dúas últimas se marcan por atoparse
 preto das fronteiras de decisión que afectan á aplicabilidade de \texttt{IVR}.
@@ -1413,3 +1445,178 @@ encadea detección, recorte, normalización e inferencia, aplica as regras exper
 produce unha saída sinxela de interpretar. Ao mesmo tempo, conserva un comportamento trazable, xa
 que cada mostra marcada para revisión indica explicitamente a causa pola que non foi considerada
 segura.
+
+\section{Resultados xerais da pipeline final}
+
+Unha vez integrada a solución completa e descrito o seu funcionamento na sección anterior, apoiándose
+no diagrama da Figura~\ref{fig:diagrama-pipeline}, avaliouse o comportamento da \textit{pipeline}
+final como sistema extremo a extremo. Esta avaliación considera de forma conxunta a detección con
+YOLO, a normalización do recorte, a inferencia da CNN e a aplicación das regras expertas de revisión.
+Nesta sección preséntanse os resultados globais obtidos e algúns exemplos cualitativos representativos
+da saída final do sistema.
+
+\subsection{Resumo cuantitativo dos resultados}
+
+Nesta subsección recóllense de forma conxunta as métricas principais obtidas pola versión final da
+\textit{pipeline}. A diferenza das avaliacións anteriores, aquí non se analiza cada compoñente de forma
+illada, senón o comportamento global do sistema xa integrado.
+
+Os resultados cuantitativos dos compoñentes principais xa foron presentados nas seccións anteriores.
+O detector YOLOv8n acadou un comportamento estable na detección da alga, como se recolle na
+Táboa~\ref{tab:resultados-yolo}, mentres que a versión final da CNN obtivo as métricas resumidas na
+Táboa~\ref{tab:comparativa-version-final}. Nesta sección non se repiten esas avaliacións por separado,
+senón que se interpretan de forma conxunta para valorar o comportamento da \textit{pipeline} completa.
+
+Na execución final sobre o subconxunto de 200 imaxes empregado posteriormente na validación con
+expertos da Sección~\ref{validacion-con-expertos}, analizouse tamén o comportamento operativo da
+\textit{pipeline}. En particular, contabilizouse cantas mostras eran devoltas como predicións seguras
+e cantas eran marcadas para revisión manual segundo os dous perfís descritos na
+Táboa~\ref{tab:modos-revision-pipeline}.
+
+\begin{table}[htbp]
+    \centering
+    \begin{tabular}{p{0.15\textwidth}|p{0.15\textwidth}|p{0.15\textwidth}|p{0.15\textwidth}|p{0.11\textwidth}|p{0.11\textwidth}|p{0.07\textwidth}|p{0.20\textwidth}}
+        \rowcolor{udcpink!25}
+        \textbf{Perfil de revisión} & \textbf{Imaxes totais} & \textbf{Marcadas para revisión} & \textbf{Predicións seguras} \\\hline
+        \texttt{solo\_dudoso} & 200 & 3 & 197 \\
+        \texttt{conservador} & 200 & 15 & 185 \\
+    \end{tabular}
+    \caption{Resumo operativo da execución final da \textit{pipeline} sobre o subconxunto de validación con expertos.}
+    \label{tab:resumo-operativo-pipeline}
+\end{table}
+
+Na execución co perfil \texttt{conservador}, 13 das 15 imaxes marcadas para revisión tiñan como motivo
+a proximidade da predición de \texttt{HPI} ás fronteiras críticas \texttt{0/1} ou \texttt{4/5}. As
+outras dúas mostras foron marcadas por baixa confianza de YOLO, aínda que unha revisión manual
+posterior confirmou que a alga fora segmentada correctamente nestes casos.
+
+Pola súa banda, na execución co perfil \texttt{solo\_dudoso}, as 3 imaxes marcadas para revisión
+correspondían a casos situados preto da fronteira \texttt{0/1}. Este resultado é coherente coa
+definición máis restritiva deste perfil, que só sinala mostras moi próximas ao cambio de decisión.
+
+\subsection{Resumo cualitativo dos resultados}
+Para complementar a análise cuantitativa, nesta subsección preséntanse exemplos reais da saída da
+\textit{pipeline}. O obxectivo é ilustrar tanto o comportamento do sistema en casos problemáticos como
+a utilidade dos mecanismos de revisión manual introducidos na versión final.
+
+\subsubsection{Exemplo de fallo}
+Neste primeiro exemplo, os dous modos de execución (\texttt{conservador} e
+\texttt{solo\_dudoso}) marcaron a mostra para revisión. Polo tanto, aínda que o sistema fallou na
+aplicabilidade de \texttt{IVR} ao predicir \texttt{HPI=0} e, como consecuencia, \texttt{IVR=0}, a
+\textit{pipeline} non considerou a saída como segura e solicitaría unha revisión experta manual.
+Segundo a etiqueta orixinal do \textit{dataset}, a mostra correspondía a \texttt{HPI=1} e
+\texttt{IVR=7}.
+
+\begin{figure}[htbp]
+    \centering
+    \begin{subfigure}[t]{0.48\textwidth}
+        \centering
+        \includegraphics[width=\textwidth]{imaxes/exemplo_fallo_01/VI244.JPG}
+        \caption{Imaxe orixinal.}
+    \end{subfigure}
+    \hfill
+    \begin{subfigure}[t]{0.48\textwidth}
+        \centering
+        \includegraphics[width=\textwidth]{imaxes/exemplo_fallo_01/VI244_yolo.jpg}
+        \caption{Detección realizada por YOLO.}
+    \end{subfigure}
+
+    \vspace{0.5em}
+
+    \begin{subfigure}[t]{0.48\textwidth}
+        \centering
+        \includegraphics[width=\textwidth]{imaxes/exemplo_fallo_01/VI244_yolo_norm.png}
+        \caption{Recorte normalizado introducido na CNN.}
+    \end{subfigure}
+    \hfill
+    \begin{subfigure}[t]{0.48\textwidth}
+        \centering
+        \includegraphics[width=\textwidth]{imaxes/exemplo_fallo_01/VI244_hpi_heatmap.png}
+        \caption{\textit{Heatmap} asociado á predición de \texttt{HPI}.}
+    \end{subfigure}
+    \caption{Exemplo dunha mostra marcada para revisión pola proximidade á fronteira \texttt{HPI=0/1}.}
+    \label{fig:exemplo-fallo-pipeline}
+\end{figure}
+
+{\rowcolors{2}{white}{udcgray!25}
+\begin{table}[htbp]
+    \centering
+    \scriptsize
+    \setlength{\tabcolsep}{3pt}
+    \begin{tabular}{p{0.14\textwidth}|c|c|c|c|c|c|p{0.20\textwidth}}
+        \rowcolor{udcpink!25}
+        \textbf{Imaxe} & \textbf{HPI} & \textbf{IVR} & \textbf{Conf. HPI} & \textbf{Conf. IVR} & \textbf{Conf. YOLO} & \textbf{Rev.} & \textbf{Motivo} \\\hline
+        \texttt{peer\_056} & 0 & 0 & 0,5247 & 0,0248 & 0,9613 & 1 & \texttt{hpi\_boundary\_0\_1} \\
+    \end{tabular}
+    \caption{Fila xerada pola \textit{pipeline} para o exemplo de fallo.}
+    \label{tab:exemplo-fallo-pipeline}
+\end{table}
+}
+
+Como se observa na Figura~\ref{fig:exemplo-fallo-pipeline} e na
+Táboa~\ref{tab:exemplo-fallo-pipeline}, a CNN inferiu \texttt{HPI=0}. Porén, a confianza asociada a
+\texttt{HPI} quedou nun valor próximo á fronteira de decisión \texttt{0/1}, polo que a mostra foi
+marcada correctamente para revisión. O \textit{heatmap} indica ademais que a rede non concentra a súa
+atención unicamente na mordedura, o que puido contribuír a desprazar a decisión cara á ausencia de
+dano. Este erro en \texttt{HPI} arrastra directamente a saída de \texttt{IVR}, xa que a lóxica experta
+da \textit{pipeline} forza \texttt{IVR=0} cando a predición de \texttt{HPI} indica ausencia de dano.
+
+\subsubsection{Exemplo de acerto}
+Como contrapunto ao caso anterior, a Figura~\ref{fig:exemplo-acerto-pipeline} mostra unha mostra na
+que a \textit{pipeline} predixo correctamente tanto \texttt{HPI} como \texttt{IVR}. Segundo a etiqueta
+orixinal do \textit{dataset}, esta imaxe correspondía a \texttt{HPI=4} e \texttt{IVR=6}, valores que
+foron reproducidos pola versión final do sistema.
+
+\begin{figure}[htbp]
+    \centering
+    \begin{subfigure}[t]{0.48\textwidth}
+        \centering
+        \includegraphics[width=\textwidth]{imaxes/exemplo_acerto/GI126.jpg}
+        \caption{Imaxe orixinal.}
+    \end{subfigure}
+    \hfill
+    \begin{subfigure}[t]{0.48\textwidth}
+        \centering
+        \includegraphics[width=\textwidth]{imaxes/exemplo_acerto/GI126_yolo.jpg}
+        \caption{Detección realizada por YOLO.}
+    \end{subfigure}
+
+    \vspace{0.5em}
+
+    \begin{subfigure}[t]{0.48\textwidth}
+        \centering
+        \includegraphics[width=\textwidth]{imaxes/exemplo_acerto/GI126_yolo_norm.png}
+        \caption{Recorte normalizado introducido na CNN.}
+    \end{subfigure}
+    \hfill
+    \begin{subfigure}[t]{0.48\textwidth}
+        \centering
+        \includegraphics[width=\textwidth]{imaxes/exemplo_acerto/GI126_ivr_p6.png}
+        \caption{\textit{Heatmap} asociado á predición de \texttt{IVR}.}
+    \end{subfigure}
+    \caption{Exemplo dunha mostra clasificada correctamente pola \textit{pipeline}.}
+    \label{fig:exemplo-acerto-pipeline}
+\end{figure}
+
+{\rowcolors{2}{white}{udcgray!25}
+\begin{table}[htbp]
+    \centering
+    \scriptsize
+    \setlength{\tabcolsep}{3pt}
+    \begin{tabular}{p{0.14\textwidth}|c|c|c|c|c|c|p{0.20\textwidth}}
+        \rowcolor{udcpink!25}
+        \textbf{Imaxe} & \textbf{HPI} & \textbf{IVR} & \textbf{Conf. HPI} & \textbf{Conf. IVR} & \textbf{Conf. YOLO} & \textbf{Rev.} & \textbf{Motivo} \\\hline
+        \texttt{peer\_022} & 4 & 6 & 0,6750 & 0,0389 & 0,4654 & 0 & \\
+    \end{tabular}
+    \caption{Fila xerada pola \textit{pipeline} para o exemplo de acerto.}
+    \label{tab:exemplo-acerto-pipeline}
+\end{table}
+}
+
+Como se recolle na Táboa~\ref{tab:exemplo-acerto-pipeline}, a mostra non foi marcada para revisión
+nin no perfil \\ \texttt{solo\_dudoso} nin no perfil \texttt{conservador}. A confianza de YOLO non é tan
+elevada como noutros exemplos, pero supera o umbral empregado pola \textit{pipeline} e a detección da
+alga é suficiente para xerar un recorte válido. A partir dese recorte, a CNN asigna correctamente
+\texttt{HPI=4} e \texttt{IVR=6}. O \textit{heatmap} da Figura~\ref{fig:exemplo-acerto-pipeline}
+amosa que a rede concentra parte da súa atención nas zonas da lámina nas que aparecen marcas de
+herbivoría, o que resulta coherente coa predición obtida.

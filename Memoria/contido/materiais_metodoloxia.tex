@@ -262,3 +262,58 @@ Na Figura~\ref{fig:cronograma-gantt} móstrase a planificación temporal aproxim
 proxecto. O solapamento entre varias tarefas reflicte precisamente o carácter iterativo do proceso:
 mentres unha fase se pechaba, os resultados obtidos condicionaban axustes nas fases anteriores ou
 servían de entrada para a seguinte iteración.
+
+\subsection{Avaliación de custos}
+A avaliación de custos realizouse a partir da planificación real do proxecto e das tarefas rexistradas
+no caderno de traballo. Segundo o cronograma da Figura~\ref{fig:cronograma-gantt}, o desenvolvemento
+comezou o 1 de outubro de 2025 e rematou coa fase de validación e peche da memoria o 17 de xuño de
+2026. Este intervalo comprende 260 días naturais. Se se exclúen fins de semana, obtéñense 186 días
+laborables. Considerando unha dedicación media de 4 horas por día laborable, a dedicación total
+estimada é de 744 horas.
+
+Esta estimación non se obtén sumando directamente a duración de cada barra do cronograma, xa que
+varias fases se solapan. Por exemplo, a reformulación ordinal comezou antes de pechar completamente a
+comparación de modelos, e a integración final coincidiu parcialmente coa validación e coa redacción da
+memoria. Por este motivo, o cálculo toma como referencia os días laborables únicos do período global e
+reparte posteriormente ese esforzo entre os perfís necesarios.
+
+As tarefas desenvolvidas condicionan os perfís considerados na estimación. O proxecto incluíu programación,
+limpeza e revisión dun conxunto de datos real,
+preparación de anotacións, adestramento dun detector YOLO, normalización de imaxes, comparación de
+varias arquitecturas CNN, reformulación do problema como regresión ordinal, análise de erros mediante
+\textit{heatmaps} e integración da \textit{pipeline} final. 
+
+Baixo unha hipótese de desenvolvemento profesional, a distribución estimada sería a seguinte:
+
+\begin{table}[htbp]
+    \centering
+    \begin{tabular}{p{0.33\textwidth}|c|c|c}
+        \rowcolor{udcpink!25}
+        \textbf{Perfil} & \textbf{Horas} & \textbf{Tarifa} & \textbf{Custo} \\\hline
+        Xestión e coordinación do proxecto & 60 & 40 euros/h & 2.400 euros \\
+        Análise e preparación de datos & 170 & 25 euros/h & 4.250 euros \\
+        Enxeñaría de aprendizaxe automática & 360 & 30 euros/h & 10.800 euros \\
+        Desenvolvemento e integración da \textit{pipeline} & 154 & 25 euros/h & 3.850 euros \\
+        \hline
+        \textbf{Total} & \textbf{744} &  & \textbf{21.300 euros} \\
+    \end{tabular}
+    \caption{Estimación do custo de persoal segundo os perfís necesarios para o desenvolvemento.}
+    \label{tab:avaliacion-custos-persoal}
+\end{table}
+
+Ademais do custo de persoal, o proxecto require certos recursos técnicos. A parte de aprendizaxe
+profunda foi deseñada tendo en conta as limitacións dun equipo local con GPU NVIDIA RTX 3070, o que
+condicionou decisións como o uso de YOLOv8n, tamaños de \textit{batch} reducidos, \textit{mixed
+precision} en CUDA e a elección final de ConvNeXt\_Tiny fronte a alternativas de maior tamaño. Tamén
+foi necesario dispoñer de almacenamento local para o \textit{dataset}, os recortes, as imaxes
+normalizadas, os \textit{checkpoints} e os resultados das execucións.
+
+Non se imputan custos de licenzas, xa que o desenvolvemento se apoiou en ferramentas abertas ou de uso
+libre para este contexto, como Python, OpenCV, Ultralytics, PyTorch, Labelme e utilidades propias
+automatizadas mediante \texttt{Makefile}. Tampouco se consideran custos de servizos na nube, xa que os
+adestramentos se realizaron en local. Se se quixese trasladar esta estimación a un contorno
+profesional, podería engadirse unha pequena partida de amortización do equipo con GPU e almacenamento,
+estimada en arredor de 500 euros para o período de desenvolvemento.
+
+Polo tanto, o custo principal estimado do proxecto é de 21.300 euros en persoal. Incluíndo unha
+imputación básica de recursos técnicos, o custo total aproximado ascendería a 21.800 euros.

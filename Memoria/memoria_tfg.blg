@@ -17,7 +17,7 @@ Reallocated singl_function (elt_size=4) to 100 items from 50.
 Database file #1: bibliografia/bibconf-gl.bib
 Database file #2: bibliografia/bibliografia.bib
 Warning--entry type for "yolov8_ultralytics" isn't style-file defined
---line 46 of file bibliografia/bibliografia.bib
+--line 98 of file bibliografia/bibliografia.bib
 -- IEEEtranN.bst version 1.14 (2015/08/26) by Michael Shell.
 -- http://www.michaelshell.org/tex/ieeetran/bibtex/
 -- See the "IEEEtran_bst_HOWTO.pdf" manual for usage information.
@@ -28,45 +28,45 @@ Reallocated glb_str_end (elt_size=4) to 20 items from 10.
 ** IEEEtran BST control entry "IEEEexample:BSTcontrol" detected.
 
 Done.
-You've used 9 entries,
+You've used 13 entries,
             4855 wiz_defined-function locations,
-            1010 strings with 10463 characters,
-and the built_in function-call counts, 6832 in all, are:
-= -- 598
-> -- 196
-< -- 39
-+ -- 104
-- -- 50
-* -- 404
-:= -- 1069
-add.period$ -- 16
-call.type$ -- 9
-change.case$ -- 17
-chr.to.int$ -- 95
-cite$ -- 9
-duplicate$ -- 439
-empty$ -- 497
-format.name$ -- 60
-if$ -- 1511
+            1037 strings with 11361 characters,
+and the built_in function-call counts, 9723 in all, are:
+= -- 863
+> -- 316
+< -- 44
++ -- 156
+- -- 82
+* -- 599
+:= -- 1585
+add.period$ -- 24
+call.type$ -- 13
+change.case$ -- 25
+chr.to.int$ -- 99
+cite$ -- 13
+duplicate$ -- 635
+empty$ -- 685
+format.name$ -- 102
+if$ -- 2125
 int.to.chr$ -- 1
-int.to.str$ -- 10
-missing$ -- 71
-newline$ -- 56
-num.names$ -- 24
-pop$ -- 191
+int.to.str$ -- 14
+missing$ -- 107
+newline$ -- 76
+num.names$ -- 36
+pop$ -- 283
 preamble$ -- 1
-purify$ -- 8
+purify$ -- 12
 quote$ -- 4
-skip$ -- 506
+skip$ -- 712
 stack$ -- 0
-substring$ -- 247
-swap$ -- 309
-text.length$ -- 7
+substring$ -- 259
+swap$ -- 429
+text.length$ -- 11
 text.prefix$ -- 0
 top$ -- 7
-type$ -- 130
+type$ -- 194
 warning$ -- 0
-while$ -- 25
+while$ -- 33
 width$ -- 0
-write$ -- 122
+write$ -- 178
 (There was 1 warning)

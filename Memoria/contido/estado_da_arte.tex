@@ -30,6 +30,20 @@ particular, as redes neuronais convolucionais constitúen unha das arquitecturas
 tarefas de clasificación visual, xa que permiten extraer patróns espaciais xerárquicos e adaptarse con
 boa eficacia a problemas nos que a aparencia, a textura ou a forma resultan determinantes.
 
+Entre as arquitecturas convolucionais recentes, ConvNeXt destaca por reformular o deseño dunha CNN
+clásica incorporando decisións inspiradas nos \textit{Vision Transformers}, mantendo ao mesmo tempo a
+natureza convolucional do modelo. Liu et al.~\cite{DBLP:journals/corr/abs-2201-03545} presentan esta
+familia como unha actualización das CNN para competir coas arquitecturas modernas baseadas en atención,
+o que a converte nunha alternativa relevante como extractor de características en tarefas de visión por
+computador.
+
+\begin{figure}[htbp]
+    \centering
+    \includegraphics[width=0.90\textwidth]{imaxes/arquitecturas/arquitectura_convnext.png}
+    \caption{Esquema xeral da arquitectura ConvNeXt descrita por Liu et al.~\cite{DBLP:journals/corr/abs-2201-03545}.}
+    \label{fig:arquitectura-convnext}
+\end{figure}
+
 No caso da detección de obxectos, a familia de modelos YOLO, introducida por Redmon et
 al.~\cite{DBLP:journals/corr/RedmonDGF15}, converteuse nunha das referencias máis
 influintes do campo. A revisión de
@@ -39,6 +53,13 @@ característicos a súa eficiencia, a súa escalabilidade modular e a súa capac
 dominios diversos. Esta combinación de rapidez e precisión explica a súa ampla adopción en aplicacións
 de tempo real e en contornas nas que é necesario localizar automaticamente elementos de interese
 dentro da imaxe.
+
+\begin{figure}[htbp]
+    \centering
+    \includegraphics[width=\textwidth]{imaxes/arquitecturas/arquitectura_yolov8.png}
+    \caption{Esquema xeral dunha arquitectura YOLOv8, pertencente á familia YOLO introducida por Redmon et al.~\cite{DBLP:journals/corr/RedmonDGF15}.}
+    \label{fig:arquitectura-yolov8}
+\end{figure}
 
 Para o presente traballo, este tipo de modelos resulta especialmente relevante porque a avaliación do
 dano non se realiza sobre unha rexión perfectamente recortada e estandarizada, senón sobre imaxes nas
