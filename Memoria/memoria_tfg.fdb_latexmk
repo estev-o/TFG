@@ -1,36 +1,36 @@
 # Fdb version 4
-["bibtex memoria_tfg"] 1781975184.61153 "memoria_tfg.aux" "memoria_tfg.bbl" "memoria_tfg" 1781975197.63786 0
+["bibtex memoria_tfg"] 1782064161.64499 "memoria_tfg.aux" "memoria_tfg.bbl" "memoria_tfg" 1782064174.18646 0
   "./bibliografia/bibconf-gl.bib" 1779176064 95 e53f7c47a79c2465d1e5dd7945bb07e3 ""
   "./bibliografia/bibliografia.bib" 1781793770.48755 7818 3b3b89a245296743893a921e207db934 ""
   "/usr/share/texlive/texmf-dist/bibtex/bst/ieeetran/IEEEtranN.bst" 1440712899 63583 d34cb6c328acc69716207f4a3421ad46 ""
-  "contido/conclusions.aux" 1781975188.01823 7678 190eee9f080560cc8ad1715e418d7c79 "xelatex"
-  "contido/desenvolvemento_solucion.aux" 1781975187.81764 23309 16ea20e8cb1b9cf5f00bfe262cf73aa2 "xelatex"
-  "contido/estado_da_arte.aux" 1781975186.59365 4116 55f8a38b569407bbcff9a4882876ce6e "xelatex"
-  "contido/introducion.aux" 1781975186.51565 3007 09bfad4c5c18573128f842e0b709fb93 "xelatex"
-  "contido/materiais_metodoloxia.aux" 1781975186.7763 6391 17967920ba2088ada4e0ea2ae928a96d "xelatex"
-  "memoria_tfg.aux" 1781975188.07072 2281 d77ea86ef772b589d34182ff2d492f33 "xelatex"
-  "portada/portada.aux" 1781975186.16989 1568 1657e65dc0abc7576b74b236a7715e75 "xelatex"
-  "portada/resumo.aux" 1781975186.20865 1704 dc2194881592cf8151a11eb87fc79d82 "xelatex"
+  "contido/conclusions.aux" 1782064164.78089 7678 190eee9f080560cc8ad1715e418d7c79 "xelatex"
+  "contido/desenvolvemento_solucion.aux" 1782064164.59791 23309 16ea20e8cb1b9cf5f00bfe262cf73aa2 "xelatex"
+  "contido/estado_da_arte.aux" 1782064163.57103 4116 55f8a38b569407bbcff9a4882876ce6e "xelatex"
+  "contido/introducion.aux" 1782064163.50603 3007 09bfad4c5c18573128f842e0b709fb93 "xelatex"
+  "contido/materiais_metodoloxia.aux" 1782064163.72501 6391 17967920ba2088ada4e0ea2ae928a96d "xelatex"
+  "memoria_tfg.aux" 1782064164.82589 2281 d77ea86ef772b589d34182ff2d492f33 "xelatex"
+  "portada/portada.aux" 1782064163.20213 1568 1657e65dc0abc7576b74b236a7715e75 "xelatex"
+  "portada/resumo.aux" 1782064163.23906 1704 dc2194881592cf8151a11eb87fc79d82 "xelatex"
   (generated)
   "memoria_tfg.bbl"
   "memoria_tfg.blg"
   (rewritten before read)
-["cusdep acn acr memoria_tfg"] 0 "memoria_tfg.acn" "memoria_tfg.acr" "memoria_tfg" 1781975197.63812 -1
-  "memoria_tfg.acn" 1781975186.06965 0 d41d8cd98f00b204e9800998ecf8427e "xelatex"
+["cusdep acn acr memoria_tfg"] 0 "memoria_tfg.acn" "memoria_tfg.acr" "memoria_tfg" 1782064174.18683 -1
+  "memoria_tfg.acn" 1782064163.07908 0 d41d8cd98f00b204e9800998ecf8427e "xelatex"
   (generated)
   "memoria_tfg.acr"
   (rewritten before read)
-["cusdep glo gls memoria_tfg"] 1781975180.12839 "memoria_tfg.glo" "memoria_tfg.gls" "memoria_tfg" 1781975197.63767 0
-  "memoria_tfg.glo" 1781975188.08122 3409 029effe92cfe09159d2c85c5b4d767d8 "xelatex"
+["cusdep glo gls memoria_tfg"] 1782064161.52559 "memoria_tfg.glo" "memoria_tfg.gls" "memoria_tfg" 1782064174.18621 0
+  "memoria_tfg.glo" 1782064164.83601 3409 029effe92cfe09159d2c85c5b4d767d8 "xelatex"
   (generated)
   "memoria_tfg.gls"
   (rewritten before read)
-["xdvipdfmx"] 1781975188.61654 "memoria_tfg.xdv" "memoria_tfg.pdf" "memoria_tfg" 1781975197.64371 0
-  "memoria_tfg.xdv" 1781975188.08122 1669044 ec4e80164c61139fc8b78a1b1db8b018 "xelatex"
+["xdvipdfmx"] 1782064165.34593 "memoria_tfg.xdv" "memoria_tfg.pdf" "memoria_tfg" 1782064174.19324 0
+  "memoria_tfg.xdv" 1782064164.83601 1675644 d0d7247cd13d5021f9a93c4988dc5eb0 "xelatex"
   (generated)
   "memoria_tfg.pdf"
   (rewritten before read)
-["xelatex"] 1781975184.73462 "memoria_tfg.tex" "memoria_tfg.xdv" "memoria_tfg" 1781975197.63818 0
+["xelatex"] 1782064161.7587 "memoria_tfg.tex" "memoria_tfg.xdv" "memoria_tfg" 1782064174.18691 0
   "/etc/texmf/web2c/texmf.cnf" 1779184348.52269 475 c0e671620eb5563b2130f56340a5fde8 ""
   "/usr/share/texlive/texmf-dist/fonts/map/fontname/texfonts.map" 1577235249 3524 cb3e574dea2d1052e39280babc910dc8 ""
   "/usr/share/texlive/texmf-dist/fonts/tfm/adobe/helvetic/phvr8t.tfm" 1136768653 7040 b2bd27e2bfe6f6948cbc3239cae7444f ""
@@ -221,15 +221,15 @@
   "/var/lib/texmf/web2c/xetex/xelatex.fmt" 1779184462 10841495 c923b3a0126bacc4e5ff56d6cfcfd555 ""
   "bibliografia/acronimos.tex" 1781541622.95901 536 f8ac3b9e5c3b87040a32577f85ea723c ""
   "bibliografia/glosario.tex" 1781708582.33537 2600 72c46296ba7d4ce61b19c5851674261b ""
-  "contido/conclusions.aux" 1781975188.01823 7678 190eee9f080560cc8ad1715e418d7c79 "xelatex"
+  "contido/conclusions.aux" 1782064164.78089 7678 190eee9f080560cc8ad1715e418d7c79 "xelatex"
   "contido/conclusions.tex" 1781974433.0124 23650 4ce0c65745b4683c5fe5d7831054a5d7 ""
-  "contido/desenvolvemento_solucion.aux" 1781975187.81764 23309 16ea20e8cb1b9cf5f00bfe262cf73aa2 "xelatex"
+  "contido/desenvolvemento_solucion.aux" 1782064164.59791 23309 16ea20e8cb1b9cf5f00bfe262cf73aa2 "xelatex"
   "contido/desenvolvemento_solucion.tex" 1781974220.76429 103553 3e27c5d9fdfed2b55d9ce33a0d16a03a ""
-  "contido/estado_da_arte.aux" 1781975186.59365 4116 55f8a38b569407bbcff9a4882876ce6e "xelatex"
+  "contido/estado_da_arte.aux" 1782064163.57103 4116 55f8a38b569407bbcff9a4882876ce6e "xelatex"
   "contido/estado_da_arte.tex" 1781975051.00387 10078 4b9873cc4b79fabd0ae1c399509ff1c3 ""
-  "contido/introducion.aux" 1781975186.51565 3007 09bfad4c5c18573128f842e0b709fb93 "xelatex"
+  "contido/introducion.aux" 1782064163.50603 3007 09bfad4c5c18573128f842e0b709fb93 "xelatex"
   "contido/introducion.tex" 1781792849.21652 5631 02247bf807fa29320474eaec20fdb0c4 ""
-  "contido/materiais_metodoloxia.aux" 1781975186.7763 6391 17967920ba2088ada4e0ea2ae928a96d "xelatex"
+  "contido/materiais_metodoloxia.aux" 1782064163.72501 6391 17967920ba2088ada4e0ea2ae928a96d "xelatex"
   "contido/materiais_metodoloxia.tex" 1781965174.63695 18991 126185f15b5a4b998030b5504219c665 ""
   "estilo_tfg.sty" 1779176064 8799 b1a815b1ff50e47297152caf90ed3713 ""
   "imaxes/Alga_cinta_metrica.JPG" 1779456706.17482 2968522 6c27e278b10f2019c0e30a552f2c63b4 ""
@@ -280,19 +280,19 @@
   "imaxes/normalizadas/VI831_yolo.png" 1780147077.82328 68661 73bc1e41f866b5db81cdad2e6bc395a3 ""
   "imaxes/normalizadas/VI888_yolo.png" 1780147077.81 116135 1c10778f25e81b4319ae6710351a15b7 ""
   "imaxes/udc.png" 1779176064 24371 f50ac2a46a5ce2cbb0a6d5a9b5eb0ac6 ""
-  "memoria_tfg.acr" 1781975180.14212 6 9f404503043ec80c08484be9f659189e "cusdep acn acr memoria_tfg"
-  "memoria_tfg.aux" 1781975188.07072 2281 d77ea86ef772b589d34182ff2d492f33 "xelatex"
-  "memoria_tfg.bbl" 1781975184.72717 5158 a52c01fdb5814003d0c267d90b3c4b77 "bibtex memoria_tfg"
-  "memoria_tfg.gls" 1781975180.27837 1875 22e309eb111b18219faa685c1942d71d "cusdep glo gls memoria_tfg"
-  "memoria_tfg.lof" 1781975188.08122 5102 0e333d0f53642286c71cf3eeedd304e9 "xelatex"
-  "memoria_tfg.lot" 1781975188.08122 6734 b1b40a3d8a9fd8d0bd3c55753ed1b4fd "xelatex"
-  "memoria_tfg.out" 1781975188.08001 8604 9453b8977e573742efee282e49413d7f "xelatex"
-  "memoria_tfg.tex" 1781731171.28399 4883 1e3ec7367b3ab0f9b67414c9bdfa071b ""
-  "memoria_tfg.toc" 1781975188.08122 7780 404ea90c52c9b05a536d6919223a86cc "xelatex"
+  "memoria_tfg.acr" 1782064161.53725 6 9f404503043ec80c08484be9f659189e "cusdep acn acr memoria_tfg"
+  "memoria_tfg.aux" 1782064164.82589 2281 d77ea86ef772b589d34182ff2d492f33 "xelatex"
+  "memoria_tfg.bbl" 1782064161.75106 5158 a52c01fdb5814003d0c267d90b3c4b77 "bibtex memoria_tfg"
+  "memoria_tfg.gls" 1782064161.63824 1875 22e309eb111b18219faa685c1942d71d "cusdep glo gls memoria_tfg"
+  "memoria_tfg.lof" 1782064164.83601 5102 0e333d0f53642286c71cf3eeedd304e9 "xelatex"
+  "memoria_tfg.lot" 1782064164.83601 6734 b1b40a3d8a9fd8d0bd3c55753ed1b4fd "xelatex"
+  "memoria_tfg.out" 1782064164.83489 8604 9453b8977e573742efee282e49413d7f "xelatex"
+  "memoria_tfg.tex" 1782064128.26434 5480 8255ffbeaf93c31a74706ebb6f12a85c ""
+  "memoria_tfg.toc" 1782064164.83601 7780 404ea90c52c9b05a536d6919223a86cc "xelatex"
   "portada/palabras_chave.tex" 1779194093.68934 565 99a8de51c533e928290c5272b97cf2c2 ""
-  "portada/portada.aux" 1781975186.16989 1568 1657e65dc0abc7576b74b236a7715e75 "xelatex"
+  "portada/portada.aux" 1782064163.20213 1568 1657e65dc0abc7576b74b236a7715e75 "xelatex"
   "portada/portada.tex" 1779176064 918 86054444dd4a6b98999e2671261e7ac9 ""
-  "portada/resumo.aux" 1781975186.20865 1704 dc2194881592cf8151a11eb87fc79d82 "xelatex"
+  "portada/resumo.aux" 1782064163.23906 1704 dc2194881592cf8151a11eb87fc79d82 "xelatex"
   "portada/resumo.tex" 1781790518.51326 2977 b0ba74b7f04532acfd88c5a696f4b86a ""
   (generated)
   "contido/conclusions.aux"
