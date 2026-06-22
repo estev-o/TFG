@@ -327,10 +327,11 @@ o que obrigou a introducir unha etapa de detección con YOLO e unha normalizaci�
 esta estratexia funcionou de maneira suficiente para o sistema final, algunhas imaxes quedaron sen
 detección ou tiveron que descartarse tras a revisión manual dos recortes.
 
-Ademais, a limpeza inicial do ficheiro tabular non eliminaba automaticamente as filas sen imaxe
-asociada, senón principalmente as imaxes sen referencia válida nas etiquetas. Isto non tivo un impacto
-práctico nas execucións finais, porque as etapas posteriores filtraban as mostras dispoñibles, pero é
-un aspecto mellorable desde o punto de vista da consistencia do pipeline.
+Ademais, a limpeza inicial aplicaba a comprobación de correspondencia nun único sentido. Esta eliminaba as
+imaxes sen referencia válida nas etiquetas, pero non retiraba automaticamente as filas do ficheiro
+tabular cuxa imaxe asociada non estivese dispoñible. Isto non tivo un impacto práctico nas execucións
+finais, porque as etapas posteriores filtraban as mostras dispoñibles, pero é un aspecto mellorable
+desde o punto de vista da consistencia do pipeline.
 
 \section{Liñas futuras}
 Finalmente, recóllense varias liñas de traballo que poderían mellorar a precisión do sistema e a súa

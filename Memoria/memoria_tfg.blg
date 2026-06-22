@@ -8,6 +8,7 @@ A level-1 auxiliary file: contido/estado_da_arte.aux
 A level-1 auxiliary file: contido/materiais_metodoloxia.aux
 A level-1 auxiliary file: contido/desenvolvemento_solucion.aux
 A level-1 auxiliary file: contido/conclusions.aux
+A level-1 auxiliary file: anexos/repositorio.aux
 The style file: IEEEtranN.bst
 Reallocated singl_function (elt_size=4) to 100 items from 50.
 Reallocated singl_function (elt_size=4) to 100 items from 50.
@@ -30,7 +31,7 @@ Reallocated glb_str_end (elt_size=4) to 20 items from 10.
 Done.
 You've used 13 entries,
             4855 wiz_defined-function locations,
-            1037 strings with 11361 characters,
+            1038 strings with 11383 characters,
 and the built_in function-call counts, 9723 in all, are:
 = -- 863
 > -- 316

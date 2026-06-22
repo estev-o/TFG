@@ -30,10 +30,7 @@ En primeiro lugar, compróbase a existencia do ficheiro Excel e procédese á s�
 problema abordado: \texttt{Photo\_cod}, \texttt{HPI} e \texttt{IVR}. Esta redución permitiu
 traballar só cos metadatos estritamente necesarios para a tarefa de inferencia.
 
-Posteriormente, as variables \texttt{HPI} e \texttt{IVR} convértense a formato numérico. As filas
-nas que algunha destas etiquetas non puido interpretarse correctamente elimínanse do conxunto de
-datos. Ademais, verificouse que ambos os dous valores fosen enteiros, xa que representan niveis
-ordinais e, polo tanto, non tería sentido manter rexistros con valores decimais.
+Posteriormente, as variables \texttt{HPI} e \texttt{IVR} convertéronse a formato numérico. Elimináronse as filas nas que algunha destas etiquetas non puido converterse correctamente ou non correspondía a un valor enteiro, xa que ambas representan niveis ordinais discretos. Deste xeito descartáronse valores non numéricos.
 
 Como parte final desta etapa, revisouse a carpeta de imaxes para detectar ficheiros sen referencia
 válida no ficheiro das táboas. As imaxes cuxo identificador non aparecía en \texttt{Photo\_cod}
@@ -42,10 +39,12 @@ elimináronse, posto que non podían utilizarse no adestramento nin na avaliaci�
 \subsubsection{Saída}
 Como resultado, xeráronse dous ficheiros de saída, en formato CSV e Excel, contendo exclusivamente
 as columnas \texttt{Photo\_cod}, \texttt{HPI} e \texttt{IVR}. Esta etapa garantiu que as imaxes
-conservadas no repositorio dispoñían dunha referencia válida no ficheiro de etiquetas. Cómpre
-indicar, porén, que esta comprobación só se aplicou nese sentido. Non se eliminaban automaticamente
-as filas do ficheiro de táboas cuxa imaxe asociada non estivese presente na carpeta. Esta limitación
-foi tida en conta durante a análise e retómase nas conclusións como posible mellora do pipeline.
+conservadas no repositorio dispoñían dunha referencia válida no ficheiro de etiquetas. A comprobación,
+porén, aplicouse só nese sentido. Elimináronse ficheiros de imaxe sen rexistro tabular asociado, pero
+non se eliminaron automaticamente as filas do ficheiro de táboas cuxa imaxe asociada non estivese
+presente na carpeta. Polo tanto, o ficheiro tabular filtrado podía conter máis rexistros ca imaxes
+dispoñibles. Esta limitación foi tida en conta durante a análise e retómase nas conclusións como
+posible mellora do pipeline.
 
 \subsection{Resultado da execución}
 Tras executar o \textit{script} sobre o \textit{dataset} inicial, composto por 5490 filas no
@@ -114,7 +113,8 @@ distinta intensidade. Isto tampouco produciu unha separación fiable entre a alg
 elementos da escena.
 
 Finalmente, tamén se intentou caracterizar unha suposta ``forma de alga'' a partir de medidas como a
-compacidade ou a estrutura do contorno. Esta aproximación resultou pouco útil debido á gran
+compacidade, entendida como a relación entre a área e o perímetro do contorno, ou a estrutura do propio contorno.
+Esta aproximación resultou pouco útil debido á gran
 variabilidade morfolóxica presente nas mostras.
 
 As distintas ideas anteriores chegaron a combinarse nun sistema de puntuación ou ``confianza'', no
@@ -466,7 +466,7 @@ especialmente problemáticas. Debido a isto e ao pequeno número de fotos errón
 continuar co mesmo YOLO e deixar como tarefa posterior unha guía para que os científicos saquen
 unhas fotos máis estandarizadas para evitar o fallo do YOLO. Como nota xeral, tamén é relevante
 mencionar que o sistema YOLO recortou algunha sombra e liñas centrais da mesa que poderían afectar
-ao posterior adestramento. Tras esta revisión manual, o conxunto final de recortes válidos quedou
+ao posterior adestramento da CNN. Tras esta revisión manual, o conxunto final de recortes válidos quedou
 reducido a 4650 imaxes.
 
 Deste xeito, o conxunto de recortes quedou preparado para a fase posterior de normalización das
@@ -858,8 +858,8 @@ Despois de executar os tres adestramentos e avaliar cada unha das súas mellores
 conxunto de test, observouse que a opción con dúas saídas compartidas resultaba a máis sólida en
 termos xerais. A run conxunta mellorou simultaneamente o \texttt{mae\_hpi} e o \texttt{mae\_ivr}
 respecto das runs especializadas, acadando un \texttt{mae\_mean} de 1.2142 fronte a 1.9656 no caso
-de \texttt{IVR} por separado e 0.5745 no caso de \texttt{HPI} por separado. Ademais, a exactitude
-exacta e o acerto dentro dun erro absoluto menor ou igual a 1 tamén foron
+de \texttt{IVR} por separado e 0.5745 no caso de \texttt{HPI} por separado. Ademais, o acerto
+exacto e o acerto dentro dun erro absoluto menor ou igual a 1 tamén foron
 competitivos, para \texttt{HPI}, a run conxunta obtivo mellor \textit{exact match} ca a run
 especializada, mentres que para \texttt{IVR} tamén mellorou o
 \textit{within\_1}. Estes resultados suxiren que compartir un mesmo \textit{backbone} para ambas
@@ -1073,12 +1073,12 @@ parte de \texttt{HPI} non se modificou.
 A diferenza apareceu na saída de \texttt{IVR}. En lugar de predicir oito clases ordinais
 \texttt{0..7}, a rede pasou a producir un único valor continuo entre \texttt{0} e \texttt{1},
 obtido mediante unha sigmoide. Este valor representa o eixo entre predominio de marcas atribuídas a
-vertebrados e predominio de marcas atribuídas a invertebrados. Para converter as etiquetas expertas
-\texttt{1..7} a este espazo continuo empregáronse as métricas expertas:
-\texttt{1->0.00}, \texttt{2->0.05}, \texttt{3->0.25}, \texttt{4->0.50},
-\texttt{5->0.75}, \texttt{6->0.95} e \texttt{7->1.00}. A perda de \texttt{IVR} calculouse mediante
-\textit{MSE}, pero só nas mostras nas que a nota tiña sentido biolóxico, é dicir, cando o
-\texttt{HPI} real pertencía ao intervalo \texttt{1..4}.
+vertebrados e predominio de marcas atribuídas a invertebrados, seguindo a escala definida na
+Táboa~\ref{tab:escala-ivr}. Para converter as etiquetas expertas \texttt{1..7} a este espazo continuo
+empregouse a proporción I/V recollida nesa táboa, normalizada ao intervalo \texttt{0..1}. A perda de
+\texttt{IVR} calculouse mediante \textit{MSE}, pero só nas mostras nas que a nota tiña sentido
+biolóxico, é dicir, cando o \texttt{HPI} real pertencía ao intervalo \texttt{1..4}, segundo o criterio
+descrito na Táboa~\ref{tab:escala-hpi}.
 
 Durante a inferencia, primeiro decodifícase \texttt{HPI}. Se a predición cae en \texttt{0},
 \texttt{5} ou \texttt{6}, a saída final de \texttt{IVR} fórzase a \texttt{0}. Se, pola contra, o
@@ -1173,44 +1173,6 @@ experta as trata como decisións diferentes. A nova formulación aseméllase má
 reduce os falsos positivos de aplicabilidade, fai desaparecer as contradicións entre \texttt{HPI} e
 \texttt{IVR} e permite avaliar a nota de \texttt{IVR} só no subconxunto no que realmente ten sentido.
 
-Como seguinte comprobación, probouse unha variante na que a aplicabilidade de \texttt{IVR} xa non se
-deducía só de \texttt{HPI}, senón que se engadía unha cabeza adicional para decidir explicitamente se
-\texttt{IVR} debía tomar o valor \texttt{0} ou unha nota entre \texttt{1} e \texttt{7}. A intención
-era comprobar se unha decisión aprendida de aplicabilidade podía recuperar parte dos casos válidos
-que a formulación anterior deixaba sen nota, mantendo a saída continua para estimar a posición no
-eixo entre vertebrados e invertebrados.
-
-{\rowcolors{2}{white}{udcgray!25}
-\begin{table}[htbp]
-    \centering
-    \footnotesize
-    \setlength{\tabcolsep}{4pt}
-    \begin{tabular}{p{0.40\textwidth}|p{0.24\textwidth}|p{0.24\textwidth}}
-        \rowcolor{udcpink!25}
-        \textbf{Métrica} & \textbf{Condicionada por \texttt{HPI}} & \textbf{Cabeza de aplicabilidade} \\\hline
-        \texttt{mae\_hpi} & 0.5940 & 0.6098 \\
-        Precisión da aplicabilidade & 0.8241 & 0.8172 \\
-        \textit{Recall} da aplicabilidade & 0.8018 & 0.8153 \\
-        Falsos positivos de aplicabilidade & 76 & 81 \\
-        \texttt{mae} condicional de \texttt{IVR} & 1.4213 & 1.6271 \\
-        \textit{Exact match} condicional & 0.3455 & 0.1547 \\
-        Consistencia HPI-IVR & 1.0000 & 0.9541 \\
-    \end{tabular}
-    \caption{Comparativa entre a formulación con IVR condicionado por HPI e a variante cunha cabeza adicional de aplicabilidade.}
-    \label{tab:comparativa-cabeza-aplicabilidade}
-\end{table}
-}
-
-Como se observa na Táboa~\ref{tab:comparativa-cabeza-aplicabilidade}, a cabeza adicional mellorou
-levemente o \textit{recall} de aplicabilidade, pero non resolveu o problema principal. A calidade da
-nota de \texttt{IVR} empeorou con claridade, tanto en \texttt{mae} condicional como en
-\textit{exact match}, e ademais reapareceron inconsistencias internas: nalgúns casos o modelo
-predicía un \texttt{HPI} que implicaba que \texttt{IVR} non debía aplicarse pero a cabeza de
-aplicabilidade activaba unha nota, ou ao revés. Por este motivo, descartouse esta variante. Aínda que
-a cabeza explícita era unha opción razoable desde o punto de vista de aprendizaxe automática, a
-formulación anterior seguía mellor a lóxica experta estrita e resultaba máis coherente como base para
-as probas seguintes.
-
 
 \subsection{Versión Final}
 A versión final mantivo a decisión tomada no apartado anterior, polo que a aplicabilidade final de
@@ -1239,9 +1201,8 @@ mediante unha regra fixa na inferencia.
 
 Durante o adestramento, \texttt{HPI} optimízase coa mesma perda ordinal tipo CORAL-like usada na
 \textit{baseline}. Para \texttt{IVR}, as etiquetas expertas positivas transfórmanse ao mesmo espazo
-continuo empregado nas probas anteriores:
-\texttt{1->0.00}, \texttt{2->0.05}, \texttt{3->0.25}, \texttt{4->0.50},
-\texttt{5->0.75}, \texttt{6->0.95} e \texttt{7->1.00}. A perda de \texttt{IVR} é un
+continuo empregado nas probas anteriores, tomando como referencia a proporción invertebrado/vertebrado da
+Táboa~\ref{tab:escala-ivr} normalizada ao intervalo \texttt{0..1}. A perda de \texttt{IVR} é un
 \textit{MSE} aplicado só ás mostras con \texttt{IVR>0}, é dicir, aquelas nas que a nota existe. A
 perda total mantén os pesos 0.3/0.7 entre \texttt{HPI} e \texttt{IVR}. O adestramento realizouse con
 imaxes redimensionadas a 224 píxeles, \textit{batch size} 8, \textit{AdamW}, taxa de aprendizaxe
