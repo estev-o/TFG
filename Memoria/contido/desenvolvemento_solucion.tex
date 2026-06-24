@@ -548,7 +548,7 @@ e no seu adestramento para realizar a inferencia sobre as variables obxectivo.
 
 
 \section{Arquitectura e adestramento da CNN}
-Nesta sección explicarase todo o proceso de desarrollo da parte máis costosa de todo o traballo, a decisión arquitectónica e o adestramento
+Nesta sección explicarase todo o proceso de desenvolvemento da parte máis costosa de todo o traballo, a decisión arquitectónica e o adestramento
 da CNN encargada de realizar a inferencia dos valoresa HPI e IVR sobre as imaxes noramalizadas. Isto débese a o aplio número de solucións
 que a tecnoloxía nos permite, dende a modificación de pesos durante o adestramento, ata o número de nodos de saída, pasando pola representación
 interna dos datos que tratamos de inferir. Por este motivo, veremos moitas variacións implementadas co obxectivo de buscar a solución
@@ -576,7 +576,7 @@ tabular co camiño de cada imaxe e cos valores de \texttt{HPI} e \texttt{IVR}. A
 baralla aleatoriamente as mostras cunha semente fixa e reparte o conxunto segundo as proporcións
 definidas para adestramento, validación e test, garantindo así unha partición reproducible.
 
-A execución de este \textit{script} proporcionou os seguintes resultados:
+A execución deste \textit{script} proporcionou os seguintes resultados:
 \begin{itemize}
     \item \textit{manifest}: 4645 imaxes.
     \item \textit{train}: 3250 imaxes.
@@ -740,7 +740,7 @@ esperando que a CNN aprendese da forma máis exacta posible as regras dos expert
 exactitude nas métricas, decidindo redondear cara o enteiro máis próximo no caso de que se usase como solución final.
 
 \paragraph{Elección de un \gls{backbone}.}
-Despóis dunha primeira proba \textit{smoke}, para comprobar o correcto adestramento dunha CNN de proba moi pequena no hardware dispoñible,
+Despois dunha primeira proba \textit{smoke}, para comprobar o correcto adestramento dunha CNN de proba moi pequena no hardware dispoñible,
 pasouse a elixir entre 3 \textit{backbones}:
 
 \begin{itemize}

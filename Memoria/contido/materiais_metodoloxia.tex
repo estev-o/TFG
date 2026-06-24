@@ -7,9 +7,9 @@ preprocesado aplicados ás imaxes, a estrutura xeral do pipeline deseñado e a c
 experimental empregada para avaliar o comportamento do sistema.
 
 \section{Conxunto de datos}
-O \textit{dataset} empregado para este traballo foi cedido polo grupo BIOCOS (Bioloxía Costeira) da Facultade de Ciencias da UDC.
+O \textit{dataset} empregado para este traballo foi cedido polo grupo BIOCOST (Bioloxía Costeira) da Facultade de Ciencias da UDC.
 Este conxunto componse de 4704 imaxes de algas \gls{kelp}, que, como xa se mencionou na sección de
-achegamento do problema na introdución \ref{chap:introducion}, presentan unha ampla variabilidade de captura. Esta heteroxeneidade afecta
+achegamento ao problema na introdución \ref{chap:introducion}, presentan unha ampla variabilidade de captura. Esta heteroxeneidade afecta
 tanto ás condicións de iluminación e ao fondo como á presenza de elementos auxiliares e anotacións
 visibles na escena. Na Figura~\ref{fig:variabilidade-dataset} móstranse varios exemplos
 representativos desta variabilidade. As imaxes tamén presentaban diferenzas de formato e tamaño, xa
@@ -50,7 +50,7 @@ que se atoparon ficheiros en formatos .JPG, .JPEG, .PNG e .HEIC.
 
 O \textit{dataset} utilízase como base para o adestramento dos modelos que formarán parte do
 \textit{pipeline} final. En particular, emprégase para adestrar un modelo YOLO orientado á detección
-das algas en imaxes capturadas polos expertos. Así mesmo, o conxunto de datos serve para
+das algas en imaxes capturadas polos expertos. Alén disto, o conxunto de datos serve para
 probar a normalización das imaxes antes do seu procesado pola CNN e, finalmente, para adestrar a
 propia CNN encargada de realizar a inferencia sobre as imaxes de entrada. Para este fin, o tamaño do
 \textit{dataset}, malia a súa variabilidade, resulta axeitado para as necesidades do sistema
@@ -116,7 +116,6 @@ grazing marks.pdf}. Como xa se indicou, seleccionáronse unicamente \gls{hpi} e 
 variables máis relevantes para os obxectivos do sistema, isto é, a cuantificación do dano observado e
 a caracterización da súa posible procedencia. Nesta sección descríbense os criterios empregados polos
 biólogos para definir ambas as dúas variables, xa que constitúen as etiquetas obxectivo do modelo.
-e
 
 \subsection{HPI}
 HPI, ou \textit{Herbivory pressure index} (Índice de presión de herbivoría), representa cuantitativamente
